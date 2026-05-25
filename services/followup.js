@@ -30,13 +30,16 @@ const FollowUpSchema = new mongoose.Schema({
   budget: { type: String, default: '' },
   scheduled_at: { type: Date, default: Date.now },
   status: { type: String, default: 'active' }, // active | completed | cancelled
-  last_sent_day: { type: Number, default: 0 }  // 0 = Day 0 sent, 1 = Day 1, etc.
+  last_sent_day: { type: Number, default: 0 },  // 0 = Day 0 sent, 1 = Day 1, etc.
+  agent_name: { type: String, default: AGENT_NAME },
+  agent_email: { type: String, default: AGENT_EMAIL },
+  agent_phone: { type: String, default: AGENT_PHONE }
 }, { timestamps: true });
 
 const FollowUp = mongoose.models.FollowUp || mongoose.model('FollowUp', FollowUpSchema);
 
 // ── Shared HTML wrapper ───────────────────────────────────────────────────────
-function wrapEmail(headerTitle, headerSub, bodyHtml) {
+function wrapEmail(headerTitle, headerSub, bodyHtml, agentName = AGENT_NAME, agentPhone = AGENT_PHONE, agentEmail = AGENT_EMAIL) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -58,13 +61,13 @@ function wrapEmail(headerTitle, headerSub, bodyHtml) {
         <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid rgba(197,160,89,0.15);padding-top:20px">
           <tr><td>
             <p style="margin:0 0 3px;font-size:10px;color:rgba(255,255,255,0.28);letter-spacing:2px;text-transform:uppercase">Your Personal Agent</p>
-            <p style="margin:0 0 3px;font-size:16px;font-weight:700;color:#faf8f4">👤 ${AGENT_NAME}</p>
-            <p style="margin:0 0 3px;font-size:13px;color:rgba(255,255,255,0.45)">📞 <a href="tel:${AGENT_PHONE}" style="color:#c5a059;text-decoration:none">${AGENT_PHONE}</a></p>
-            <p style="margin:0 0 3px;font-size:13px;color:rgba(255,255,255,0.45)">📧 <a href="mailto:${AGENT_EMAIL}" style="color:#c5a059;text-decoration:none">${AGENT_EMAIL}</a></p>
+            <p style="margin:0 0 3px;font-size:16px;font-weight:700;color:#faf8f4">👤 ${agentName}</p>
+            <p style="margin:0 0 3px;font-size:13px;color:rgba(255,255,255,0.45)">📞 <a href="tel:${agentPhone}" style="color:#c5a059;text-decoration:none">${agentPhone}</a></p>
+            <p style="margin:0 0 3px;font-size:13px;color:rgba(255,255,255,0.45)">📧 <a href="mailto:${agentEmail}" style="color:#c5a059;text-decoration:none">${agentEmail}</a></p>
             <p style="margin:0;font-size:13px;color:rgba(255,255,255,0.45)">🏢 ${COMPANY_NAME}</p>
             <p style="margin:12px 0 0">
               <a href="${BASE_URL}" style="font-size:12px;color:#c5a059;text-decoration:underline;margin-right:16px">🌐 Website</a>
-              <a href="mailto:${AGENT_EMAIL}" style="font-size:12px;color:#c5a059;text-decoration:underline">✉️ Email Us</a>
+              <a href="mailto:${agentEmail}" style="font-size:12px;color:#c5a059;text-decoration:underline">✉️ Email Us</a>
             </p>
           </td></tr>
         </table>
@@ -129,7 +132,7 @@ function ctaButton(text = 'Browse All Properties →') {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Day 0 — Instant welcome + full property list
-function buildDay0Email(lead, properties) {
+function buildDay0Email(lead, properties, agentName = AGENT_NAME, agentPhone = AGENT_PHONE, agentEmail = AGENT_EMAIL) {
   const interestLine = lead.property_interest
     ? `matching your interest in <strong style="color:#c5a059">${lead.property_interest}</strong>`
     : 'that we think you\'ll love';
@@ -140,7 +143,7 @@ function buildDay0Email(lead, properties) {
     <div style="background:rgba(197,160,89,0.07);border:1px solid rgba(197,160,89,0.2);border-radius:10px;padding:20px;margin-bottom:24px">
       <p style="margin:0 0 8px;font-size:18px;font-weight:600;color:#faf8f4">Hi ${lead.name || 'there'}! 👋</p>
       <p style="margin:0;font-size:14px;color:rgba(255,255,255,0.6);line-height:1.8">
-        Thank you for your interest in ${COMPANY_NAME}! I'm <strong style="color:#faf8f4">${AGENT_NAME}</strong>, your personal property consultant.<br><br>
+        Thank you for your interest in ${COMPANY_NAME}! I'm <strong style="color:#faf8f4">${agentName}</strong>, your personal property consultant.<br><br>
         I've handpicked our best listings ${interestLine}${budgetLine}. Take a look below — I'd love to hear which one catches your eye! 🏡
       </p>
     </div>
@@ -155,13 +158,13 @@ function buildDay0Email(lead, properties) {
 
   return {
     subject: `🏡 Welcome, ${lead.name || 'there'}! Here are your handpicked properties — ${COMPANY_NAME}`,
-    html: wrapEmail('🏡 Welcome to ' + COMPANY_NAME, 'Your handpicked property selection is ready', body),
-    plain: `Hi ${lead.name || 'there'},\n\nThank you for your interest! I'm ${AGENT_NAME} from ${COMPANY_NAME}.\n\nI've selected properties ${interestLine}${budgetLine}.\n\nBrowse listings: ${BASE_URL}\n\nReply to this email with any questions!\n\n${AGENT_NAME}\n${AGENT_PHONE}\n${AGENT_EMAIL}`
+    html: wrapEmail('🏡 Welcome to ' + COMPANY_NAME, 'Your handpicked property selection is ready', body, agentName, agentPhone, agentEmail),
+    plain: `Hi ${lead.name || 'there'},\n\nThank you for your interest! I'm ${agentName} from ${COMPANY_NAME}.\n\nI've selected properties ${interestLine}${budgetLine}.\n\nBrowse listings: ${BASE_URL}\n\nReply to this email with any questions!\n\n${agentName}\n${agentPhone}\n${agentEmail}`
   };
 }
 
 // Day 1 — 24h follow-up
-function buildDay1Email(lead, properties) {
+function buildDay1Email(lead, properties, agentName = AGENT_NAME, agentPhone = AGENT_PHONE, agentEmail = AGENT_EMAIL) {
   const body = `
     <p style="margin:0 0 18px;font-size:15px;color:#faf8f4;line-height:1.8">
       Hi ${lead.name || 'there'}, just checking in! 🙂<br><br>
@@ -184,13 +187,13 @@ function buildDay1Email(lead, properties) {
 
   return {
     subject: `👋 ${lead.name ? lead.name + ', did' : 'Did'} you see our property listings? — ${COMPANY_NAME}`,
-    html: wrapEmail('Still Interested?', 'Our properties are waiting for you', body),
-    plain: `Hi ${lead.name || 'there'},\n\nJust checking in! Did you get a chance to look at the properties I sent yesterday?\n\nWe have great options${lead.budget ? ` within your ${lead.budget} budget` : ''}.\n\nBook a free visit: ${BASE_URL}\n\n${AGENT_NAME}\n${AGENT_PHONE}\n${AGENT_EMAIL}`
+    html: wrapEmail('Still Interested?', 'Our properties are waiting for you', body, agentName, agentPhone, agentEmail),
+    plain: `Hi ${lead.name || 'there'},\n\nJust checking in! Did you get a chance to look at the properties I sent yesterday?\n\nWe have great options${lead.budget ? ` within your ${lead.budget} budget` : ''}.\n\nBook a free visit: ${BASE_URL}\n\n${agentName}\n${agentPhone}\n${agentEmail}`
   };
 }
 
 // Day 2 — 48h follow-up with social proof + urgency
-function buildDay2Email(lead, properties) {
+function buildDay2Email(lead, properties, agentName = AGENT_NAME, agentPhone = AGENT_PHONE, agentEmail = AGENT_EMAIL) {
   const interest = lead.property_interest || 'properties';
   const body = `
     <p style="margin:0 0 18px;font-size:15px;color:#faf8f4;line-height:1.8">Hi ${lead.name || 'there'}! 🎉</p>
@@ -212,13 +215,13 @@ function buildDay2Email(lead, properties) {
 
   return {
     subject: `🔥 These properties are moving fast, ${lead.name || 'there'} — don't miss out`,
-    html: wrapEmail('Properties Moving Fast!', 'High demand this week — secure your visit now', body),
-    plain: `Hi ${lead.name || 'there'},\n\nOur ${interest} listings are getting a lot of interest this week. Don't miss out!\n\nBook your free visit now: ${BASE_URL}\n\n${AGENT_NAME}\n${AGENT_PHONE}\n${AGENT_EMAIL}`
+    html: wrapEmail('Properties Moving Fast!', 'High demand this week — secure your visit now', body, agentName, agentPhone, agentEmail),
+    plain: `Hi ${lead.name || 'there'},\n\nOur ${interest} listings are getting a lot of interest this week. Don't miss out!\n\nBook your free visit now: ${BASE_URL}\n\n${agentName}\n${agentPhone}\n${agentEmail}`
   };
 }
 
 // Day 3 — 72h final follow-up
-function buildDay3Email(lead, properties) {
+function buildDay3Email(lead, properties, agentName = AGENT_NAME, agentPhone = AGENT_PHONE, agentEmail = AGENT_EMAIL) {
   const interest = lead.property_interest || 'properties';
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#faf8f4;line-height:1.8">Hi ${lead.name || 'there'},</p>
@@ -242,8 +245,8 @@ function buildDay3Email(lead, properties) {
 
   return {
     subject: `🏡 Last one from me, ${lead.name || 'there'} — your dream property is waiting`,
-    html: wrapEmail('Final Note from ' + AGENT_NAME, 'Your perfect property is still available', body),
-    plain: `Hi ${lead.name || 'there'},\n\nThis is my last follow-up. I genuinely think we have something perfect for you.\n\nBook a free property visit: ${BASE_URL}\n\nOr just reply to this email and I'll set everything up.\n\nThank you for your time!\n${AGENT_NAME}\n${AGENT_PHONE}\n${AGENT_EMAIL}`
+    html: wrapEmail('Final Note from ' + agentName, 'Your perfect property is still available', body, agentName, agentPhone, agentEmail),
+    plain: `Hi ${lead.name || 'there'},\n\nThis is my last follow-up. I genuinely think we have something perfect for you.\n\nBook a free property visit: ${BASE_URL}\n\nOr just reply to this email and I'll set everything up.\n\nThank you for your time!\n${agentName}\n${agentPhone}\n${agentEmail}`
   };
 }
 
@@ -264,14 +267,18 @@ async function scheduleFollowUps(lead, properties = []) {
     return;
   }
 
+  // Fetch listing agent details from lead payload
+  const agentEmail = lead.agent_email || AGENT_EMAIL;
+  const agentName = lead.agent_name || AGENT_NAME;
+  const agentPhone = lead.agent_phone || AGENT_PHONE;
+
   // 1. Cancel any existing follow-ups for this number
   await cancelFollowUps(phone);
 
   // 2. Day 0 Welcome Email: Send INSTANTLY inside the active request context
-  // This completely solves the issue where setTimeout is killed in Vercel serverless runs.
-  console.log(`📧 Dispatching Drip Day 0 (Welcome) instantly to ${lead.name} <${lead.email}>...`);
+  console.log(`📧 Dispatching Drip Day 0 (Welcome) instantly to ${lead.name} <${lead.email}> from ${agentName}...`);
   try {
-    const { subject, html, plain } = buildDay0Email(lead, properties);
+    const { subject, html, plain } = buildDay0Email(lead, properties, agentName, agentPhone, agentEmail);
     const result = await sendEmail({ to: lead.email, subject, html, message: plain });
     if (result.success) {
       console.log(`✅ Day 0 Welcome email successfully delivered.`);
@@ -282,7 +289,7 @@ async function scheduleFollowUps(lead, properties = []) {
     console.error('Day 0 welcome email exception:', e.message);
   }
 
-  // 3. Register lead in MongoDB database to survive server restarts/cold-starts
+  // 3. Register lead in MongoDB database
   try {
     await FollowUp.findOneAndUpdate(
       { phone },
@@ -293,11 +300,14 @@ async function scheduleFollowUps(lead, properties = []) {
         budget: lead.budget || '',
         scheduled_at: new Date(),
         status: 'active',
-        last_sent_day: 0
+        last_sent_day: 0,
+        agent_name: agentName,
+        agent_email: agentEmail,
+        agent_phone: agentPhone
       },
       { upsert: true, new: true }
     );
-    console.log(`📅 Database-backed email follow-ups registered for ${lead.name} <${lead.email}>`);
+    console.log(`📅 Database-backed email follow-ups registered for ${lead.name} <${lead.email}> under agent ${agentName}`);
   } catch (err) {
     console.error('Failed to save follow-up to MongoDB:', err.message);
   }
@@ -379,12 +389,16 @@ async function processFollowUpDrip(properties = []) {
         budget: f.budget
       };
 
-      console.log(`- Lead ${f.name} (${f.phone}) | Hours elapsed: ${elapsedHours.toFixed(2)} | Last sent day: ${f.last_sent_day}`);
+      const agentName = f.agent_name || AGENT_NAME;
+      const agentEmail = f.agent_email || AGENT_EMAIL;
+      const agentPhone = f.agent_phone || AGENT_PHONE;
+
+      console.log(`- Lead ${f.name} (${f.phone}) | Hours elapsed: ${elapsedHours.toFixed(2)} | Agent: ${agentName} | Last sent day: ${f.last_sent_day}`);
 
       // Day 1 (after 24 hours)
       if (elapsedHours >= 24 && f.last_sent_day < 1) {
-        console.log(`📧 Sending Day 1 email to ${f.name} <${f.email}>...`);
-        const { subject, html, plain } = buildDay1Email(lead, properties);
+        console.log(`📧 Sending Day 1 email to ${f.name} <${f.email}> from ${agentName}...`);
+        const { subject, html, plain } = buildDay1Email(lead, properties, agentName, agentPhone, agentEmail);
         const res = await sendEmail({ to: f.email, subject, html, message: plain });
         if (res.success) {
           f.last_sent_day = 1;
@@ -396,8 +410,8 @@ async function processFollowUpDrip(properties = []) {
       }
       // Day 2 (after 48 hours)
       else if (elapsedHours >= 48 && f.last_sent_day < 2) {
-        console.log(`📧 Sending Day 2 email to ${f.name} <${f.email}>...`);
-        const { subject, html, plain } = buildDay2Email(lead, properties);
+        console.log(`📧 Sending Day 2 email to ${f.name} <${f.email}> from ${agentName}...`);
+        const { subject, html, plain } = buildDay2Email(lead, properties, agentName, agentPhone, agentEmail);
         const res = await sendEmail({ to: f.email, subject, html, message: plain });
         if (res.success) {
           f.last_sent_day = 2;
@@ -409,8 +423,8 @@ async function processFollowUpDrip(properties = []) {
       }
       // Day 3 (after 72 hours)
       else if (elapsedHours >= 72 && f.last_sent_day < 3) {
-        console.log(`📧 Sending Day 3 email to ${f.name} <${f.email}>...`);
-        const { subject, html, plain } = buildDay3Email(lead, properties);
+        console.log(`📧 Sending Day 3 email to ${f.name} <${f.email}> from ${agentName}...`);
+        const { subject, html, plain } = buildDay3Email(lead, properties, agentName, agentPhone, agentEmail);
         const res = await sendEmail({ to: f.email, subject, html, message: plain });
         if (res.success) {
           f.last_sent_day = 3;

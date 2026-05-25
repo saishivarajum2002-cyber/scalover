@@ -1,0 +1,673 @@
+diff --git a/api/index.js b/api/index.js
+index 2ba03ec..f1a17bc 100644
+--- a/api/index.js
++++ b/api/index.js
+@@ -406,6 +406,30 @@ async function syncLeadToSnapshot(agentEmail, leadId, updates) {
+   }
+ }
+ 
++async function syncCallLogToSnapshot(agentEmail, callLogObj) {
++  try {
++    let snapshot = await DataSnapshot.findOne({ email: agentEmail });
++    if (!snapshot) snapshot = new DataSnapshot({ email: agentEmail, data: {} });
++    if (!snapshot.data) snapshot.data = {};
++
++    let calls = snapshot.data.pe_calls || [];
++    const wasString = typeof calls === 'string';
++    if (wasString) {
++      try { calls = JSON.parse(calls); } catch (e) { calls = []; }
++    }
++
++    calls.unshift(callLogObj);
++    if (calls.length > 100) calls = calls.slice(0, 100);
++
++    snapshot.data.pe_calls = wasString ? JSON.stringify(calls) : calls;
++    snapshot.markModified('data');
++    await snapshot.save();
++    console.log(`🔄 Call log successfully synced to MongoDB DataSnapshot for ${agentEmail}`);
++  } catch (err) {
++    console.error('❌ syncCallLogToSnapshot Error:', err.message);
++  }
++}
++
+ async function notifyAgent(agentEmail, { title, description, type, icon, emailSubject }) {
+   console.log(`🔔 Notifying Agent [${agentEmail}]: ${title}`);
+ 
+@@ -881,10 +905,36 @@ async function processVisitBooking({ agentEmail, visit, is_ai_booking }) {
+   })();
+ 
+   // ── Update Lead Stage & Dashboard Sync
+-  const leadId = visit.lead_id || visit.client_email;
+-  if (leadId) {
+-    await updateLeadStage(leadId, 'Negotiation');
+-    await syncLeadToSnapshot(agentEmail, leadId, { pipeline_stage: 'Negotiation', status: 'Negotiation' });
++  let finalLeadId = visit.lead_id;
++  if (!finalLeadId || (typeof finalLeadId === 'string' && !finalLeadId.match(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/))) {
++    // Try to look up lead by email or phone to get the correct UUID
++    try {
++      const { createClient } = require('@supabase/supabase-js');
++      const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
++      
++      let leadData = null;
++      if (visit.client_phone) {
++        const { data } = await sb.from('team_leads').select('id').eq('phone', visit.client_phone).limit(1);
++        if (data && data.length > 0) leadData = data[0];
++      }
++      if (!leadData && visit.client_email) {
++        const { data } = await sb.from('team_leads').select('id').eq('email', visit.client_email).limit(1);
++        if (data && data.length > 0) leadData = data[0];
++      }
++      if (!leadData && visit.client_phone) {
++        const { data } = await sb.from('leads').select('id').eq('phone', visit.client_phone).limit(1);
++        if (data && data.length > 0) leadData = data[0];
++      }
++      
++      if (leadData) finalLeadId = leadData.id;
++    } catch (e) {
++      console.error('Error finding UUID for stage update:', e.message);
++    }
++  }
++
++  if (finalLeadId) {
++    await updateLeadStage(finalLeadId, 'Negotiation');
++    await syncLeadToSnapshot(agentEmail, finalLeadId, { pipeline_stage: 'Negotiation', status: 'Negotiation' });
+   }
+ 
+   return { success: true, id: realId };
+@@ -1784,207 +1834,428 @@ app.post('/api/sync', protect, async (req, res) => {
+     if (!email || !data) return res.status(400).json({ error: 'Email and data required' });
+     await DataSnapshot.findOneAndUpdate({ email }, { email, data }, { upsert: true });
+     res.json({ success: true });
+-  } catch (error) {
+-    res.status(500).json({ error: 'Database Error: ' + error.message });
+-  }
+-});
++  } catch (error)    // ── function-call — AI wants to book a visit ─────────────────────────────
++    else if (type === 'function-call') {
++      const fnName = event?.message?.functionCall?.name;
++      const fnArgs = event?.message?.functionCall?.parameters || {};
+ 
+-// ──────────────────────────────────────────────────────────────────────────────
+-// MARKETING - POST /api/marketing/kit
+-// ──────────────────────────────────────────────────────────────────────────────
+-app.post('/api/marketing/kit', async (req, res) => {
+-  try {
+-    const { propertyId, agentEmail } = req.body;
+-    if (!propertyId) return res.status(400).json({ error: 'propertyId is required' });
++      console.log(`🔧 VAPI function call: ${fnName}`, fnArgs);
+ 
+-    // Fetch property - in a real app, this would be from DB
+-    // Here we might need to find it from the agent's data snapshot in MongoDB
+-    const snapshot = await DataSnapshot.findOne({ email: agentEmail });
+-    if (!snapshot || !snapshot.data || !snapshot.data.pe_properties) {
+-      return res.status(404).json({ error: 'Agent properties not found' });
+-    }
++      if (fnName === 'bookVisit') {
++        // Get lead details from DB
++        let leadInfo = {};
++        if (leadId || phone) {
++          try {
++            const { createClient } = require('@supabase/supabase-js');
++            const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
++            
++            // 1. Try team_leads by ID
++            if (leadId) {
++              const { data } = await sb.from('team_leads').select('*').eq('id', leadId).single();
++              if (data) leadInfo = data;
++            }
++            // 2. Try leads by ID
++            if (!leadInfo.name && leadId) {
++              const { data } = await sb.from('leads').select('*').eq('id', leadId).single();
++              if (data) leadInfo = data;
++            }
++            // 3. Try team_leads by phone
++            if (!leadInfo.name && phone) {
++              const { data } = await sb.from('team_leads').select('*').eq('phone', phone).single();
++              if (data) leadInfo = data;
++            }
++            // 4. Try leads by phone
++            if (!leadInfo.name && phone) {
++              const { data } = await sb.from('leads').select('*').eq('phone', phone).single();
++              if (data) leadInfo = data;
++            }
++          } catch (e) {
++            console.error('Error fetching lead info in bookVisit webhook:', e.message);
++          }
++        }
+ 
+-    const properties = typeof snapshot.data.pe_properties === 'string'
+-      ? JSON.parse(snapshot.data.pe_properties)
+-      : snapshot.data.pe_properties;
++        // Save the booking
++        try {
++          const visitPayload = {
++            agentEmail: AGENT_EMAIL,
++            is_ai_booking: true,
++            visit: {
++              lead_id: leadId || leadInfo.id || null,
++              client_name: leadInfo.name || call.customer?.name || 'Lead',
++              client_phone: phone,
++              client_email: leadInfo.email || call.customer?.email || '',
++              property_name: fnArgs.property_interest || leadInfo.property_interest || 'Property Visit',
++              visit_date: fnArgs.visit_date,
++              visit_time: fnArgs.visit_time,
++              notes: `Booked by VAPI AI agent — call ID: ${call.id}`,
++              status: 'confirmed',
++            }
++          };
+ 
+-    const prop = properties.find(p => p.id === propertyId);
+-    if (!prop) return res.status(404).json({ error: 'Property not found' });
++          const bookingResult = await processVisitBooking(visitPayload);
++          
++          if (phone) cancelFollowUps(phone);
+ 
+-    const kitResponse = await generateSocialMarketingKit(prop);
+-    res.json(kitResponse);
+-  } catch (error) {
+-    console.error('Marketing Kit Error:', error.message);
+-    res.status(500).json({ error: 'Failed to generate kit: ' + error.message });
+-  }
+-});
++          console.log(`✅ VAPI booking saved via processVisitBooking: ${fnArgs.visit_date} ${fnArgs.visit_time}`);
++          
++          return res.json({
++            results: [{
++              toolCallId: event.message.functionCall.id,
++              result: `Visit successfully booked for ${fnArgs.visit_date} at ${fnArgs.visit_time}. Tell the customer we look forward to seeing them!`
++            }]
++          });
++        } catch (bookingError) {
++          console.error('❌ VAPI tool bookVisit failed:', bookingError.message || bookingError.error);
++          return res.json({
++            results: [{
++              toolCallId: event.message.functionCall.id,
++              result: `I am sorry, but I couldn't book that slot: ${bookingError.error || bookingError.message}. Please ask the customer for a different time.`
++            }]
++          });
++        }
++      }
+ 
++      if (fnName === 'transferCall') {
++        const transferPhone = process.env.TRANSFER_NUMBER || process.env.AGENT_PHONE;
++        
++        // 1. Notify agent via Email (WhatsApp/Plivo removed)
++        try {
++          await sendEmail({
++            to: AGENT_EMAIL,
++            subject: `🔥 URGENT: Transfer Request from VAPI AI — Lead ${phone}`,
++            message: `VAPI AI transferred a lead who requested a human agent.\n\nLead Phone: ${phone}\nReason: ${fnArgs.reason || 'requested human'}\n\nPlease call them back immediately!\n\n— PropEdge AI`,
++            html: `<div style="font-family:Arial,sans-serif;max-width:600px;background:#0a0e14;color:#faf8f4;padding:24px;border-radius:8px;border:2px solid #e05060"><h2 style="color:#e05060;margin:0 0 16px">🔥 URGENT: Transfer Request</h2><p>A lead has requested a human agent via VAPI AI.</p><table style="width:100%;border-collapse:collapse"><tr><td style="padding:8px 0;color:rgba(255,255,255,0.5)">Lead Phone:</td><td style="padding:8px 0;color:#faf8f4;font-weight:bold">${phone}</td></tr><tr><td style="padding:8px 0;color:rgba(255,255,255,0.5)">Reason:</td><td style="padding:8px 0;color:#faf8f4">${fnArgs.reason || 'requested human'}</td></tr></table><p style="margin-top:16px;color:#e05060;font-weight:bold">Please call them back immediately!</p></div>`
++          });
++        } catch (e) { console.error('Transfer Email Error:', e.message); }
+ 
++        // 2. Instruct Vapi to transfer the call if controlUrl is present
++        const controlUrl = call.monitor?.controlUrl || call.controlUrl;
++        if (controlUrl && transferPhone) {
++          console.log(`🚀 Initiating Vapi transfer to ${transferPhone}`);
++          try {
++            const { default: fetch } = await import('node-fetch');
++            await fetch(controlUrl, {
++              method: 'POST',
++              headers: { 'Content-Type': 'application/json' },
++              body: JSON.stringify({
++                operation: 'transfer-call',
++                destination: {
++                  type: 'number',
++                  number: transferPhone
++                }
++              }),
++            });
++          } catch (e) {
++            console.error('❌ Vapi transfer failed:', e.message);
++          }
++        }
+ 
+-// ── OFFICIAL META WHATSAPP CLOUD API — For Vapi Tool Calls ───────────────────
+-app.post('/api/ai/whatsapp', async (req, res) => {
+-  try {
+-    const { phone, message } = req.body.message?.toolCalls?.[0]?.function?.arguments 
+-             || req.body.message?.functionCall?.parameters 
+-             || req.body;
++        return res.json({
++          results: [{
++            toolCallId: event.message.functionCall.id,
++            result: "Transferring you to a live agent now. One moment please."
++          }]
++        });
++      }
+ 
+-    if (!phone || !message) return res.status(400).json({ error: 'phone and message required' });
++      if (fnName === 'notifyAgentNoMatch') {
++        const { budget, location, property_type } = fnArgs;
++        console.log('⚠️ Unmatched Lead Alert: ' + phone + ' - ' + budget + ' in ' + location);
+ 
+-    console.log(`☁️ Cloud WhatsApp Request for ${phone}`);
++        try {
++          await sendEmail({
++            to: AGENT_EMAIL,
++            subject: '⚠️ Unmatched Lead Alert: Request outside inventory',
++            message: `A lead called but their request does not match our current inventory.
++ 
++Lead Phone: ${phone}
++Requested Budget: ${budget || 'N/A'}
++Requested Location: ${location || 'N/A'}
++Property Type: ${property_type || 'N/A'}
++
++Please check the market and contact them within 5 hours.
+ 
+-    const TOKEN    = process.env.WHATSAPP_TOKEN;
+-    const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
++— PropEdge AI`,
++            html: '<div style="font-family:Arial,sans-serif;max-width:600px;background:#0a0e14;color:#faf8f4;padding:24px;border-radius:8px;border:2px solid #f0c040"><h2 style="color:#f0c040;margin:0 0 16px">⚠️ Unmatched Lead Request</h2><p>A lead called asking for something outside our current inventory. They have been informed you will reach out within 5 hours.</p><table style="width:100%;border-collapse:collapse"><tr><td style="padding:8px 0;color:rgba(255,255,255,0.5)">Lead Phone:</td><td style="padding:8px 0;color:#faf8f4;font-weight:bold">' + phone + '</td></tr><tr><td style="padding:8px 0;color:rgba(255,255,255,0.5)">Requested Budget:</td><td style="padding:8px 0;color:#faf8f4">' + (budget || 'N/A') + '</td></tr><tr><td style="padding:8px 0;color:rgba(255,255,255,0.5)">Requested Location:</td><td style="padding:8px 0;color:#faf8f4">' + (location || 'N/A') + '</td></tr><tr><td style="padding:8px 0;color:rgba(255,255,255,0.5)">Property Type:</td><td style="padding:8px 0;color:#faf8f4">' + (property_type || 'N/A') + '</td></tr></table></div>'
++          });
++        } catch (e) { console.error('Notify Email Error:', e.message); }
+ 
+-    if (!TOKEN || !PHONE_ID) {
+-      console.warn('⚠️ Meta WhatsApp Env Vars missing. Simulating...');
+-      return res.json({ success: true, simulated: true, message: 'Env vars missing' });
++        return res.json({
++          results: [{
++            toolCallId: event.message.functionCall.id,
++            result: 'Successfully notified the agent. Please tell the user: I have sent your details to our senior agent, he will check the market and inform you within 5 hours.'
++          }]
++        });
++      }
+     }
+ 
+-    const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
+-    const response = await fetch(`https://graph.facebook.com/v20.0/${PHONE_ID}/messages`, {
+-      method: 'POST',
+-      headers: {
+-        'Authorization': `Bearer ${TOKEN}`,
+-        'Content-Type': 'application/json',
+-      },
+-      body: JSON.stringify({
+-        messaging_product: "whatsapp",
+-        to: phone.replace(/\+/g, ''), // Meta needs numbers without the +
+-        type: "text",
+-        text: { body: message }
+-      })
+-    });
++    // ── end-of-call-report — call ended, save everything ────────────────────
++    else if (type === 'end-of-call-report') {
++      const report = event?.message || {};
++      const transcript = report.transcript || '';
++      const recording = report.recordingUrl || null;
++      const endedReason = report.endedReason || 'unknown';
++      const duration    = report.durationSeconds || 0;
++      const isFailed    = ['customer-busy', 'customer-did-not-answer', 'voicemail', 'customer-did-not-pick-up', 'phone-number-not-found', 'network-error'].includes(endedReason);
+ 
+-    const data = await response.json();
+-    
+-    if (data.error) {
+-      console.error('❌ Meta WhatsApp Error:', data.error.message);
+-      return res.status(500).json({ success: false, error: data.error.message });
+-    }
++      console.log(`📋 VAPI call ended. Duration: ${duration}s | Reason: ${endedReason}`);
+ 
+-    console.log(`✅ Meta WhatsApp Sent to ${phone}`);
+-    res.json({ 
+-      results: [{
+-        toolCallId: req.body.message?.toolCalls?.[0]?.id || '1',
+-        result: "Message sent successfully via WhatsApp."
+-      }]
+-    });
++      // 1. Save call log to database
++      await saveCallLog({
++        leadId,
++        agentId: metadata.agentId || null,
++        teamId: metadata.teamId || null,
++        phone,
++        duration,
++        transcript,
++        recordingUrl: recording,
++        status: duration > 10 ? 'answered' : 'no_answer',
++      });
+ 
+-  } catch (error) {
+-    console.error('❌ Cloud WhatsApp Critical Error:', error.message);
+-    res.status(500).json({ success: false, error: error.message });
+-  }
+-});
++      // 2. Extract structured qualification details from Vapi analysis report
++      const analysis = event?.message?.analysis || event?.analysis || event?.message?.call?.analysis || {};
++      const structuredData = analysis.structuredData || {};
++
++      const extractedLead = {
++        name: call.customer?.name || metadata.name || null,
++        phone: phone || call.customer?.number || metadata.phone || null,
++        email: metadata.email || call.customer?.email || structuredData.email || structuredData.client_email || null,
++        budget: structuredData.budget || metadata.budget || null,
++        bhk_preference: structuredData.bhk_preference || structuredData.bhkPreference || structuredData.bhk || null,
++        pre_approval_status: structuredData.pre_approval_status || structuredData.preApprovalStatus || structuredData.preApproval || null,
++        property_interest: structuredData.property_interest || structuredData.propertyInterest || metadata.interest || null,
++        notes: analysis.summary || transcript.substring(0, 500) || null,
++        status: 'Contacted',
++        qualification_score: parseInt(structuredData.qualification_score || structuredData.score || (structuredData.pre_approval_status === 'yes' ? 90 : 70)) || 70
++      };
+ 
+-// ──────────────────────────────────────────────────────────────────────────────
+-// MARKETING - POST /api/marketing/whatsapp-blast  (Legacy - uses phone bridge)
+-// ──────────────────────────────────────────────────────────────────────────────
++      // 3. Find and update the existing lead in database and dashboard snapshot
++      let finalLeadId = leadId;
++      const { createClient } = require('@supabase/supabase-js');
++      const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
++
++      let existingLead = null;
++      if (finalLeadId) {
++        let { data } = await sb.from('team_leads').select('*').eq('id', finalLeadId).single();
++        if (data) {
++          existingLead = { table: 'team_leads', data };
++        } else {
++          let { data: lData } = await sb.from('leads').select('*').eq('id', finalLeadId).single();
++          if (lData) existingLead = { table: 'leads', data: lData };
++        }
++      }
++      
++      if (!existingLead && phone) {
++        let { data } = await sb.from('team_leads').select('*').eq('phone', phone).single();
++        if (data) {
++          existingLead = { table: 'team_leads', data };
++          finalLeadId = data.id;
++        } else {
++          let { data: lData } = await sb.from('leads').select('*').eq('phone', phone).single();
++          if (lData) {
++            existingLead = { table: 'leads', data: lData };
++            finalLeadId = lData.id;
++          }
++        }
++      }
+ 
+-// ──────────────────────────────────────────────────────────────────────────────
+-// SOCIAL PUBLISH - POST /api/social/publish  (Meta Graph API)
+-// ──────────────────────────────────────────────────────────────────────────────
+-app.post('/api/social/publish', async (req, res) => {
+-  try {
+-    const { platform, accessToken, mediaUrl, caption, pageId } = req.body;
+-    if (!platform || !accessToken) return res.status(400).json({ error: 'platform and accessToken required' });
++      if (existingLead) {
++        console.log(`📝 Updating existing lead ${finalLeadId} in Supabase table "${existingLead.table}"`);
++        const updates = {};
++        if (extractedLead.budget) updates.budget = extractedLead.budget;
++        if (extractedLead.bhk_preference) updates.bhk_preference = extractedLead.bhk_preference;
++        if (extractedLead.pre_approval_status) updates.pre_approval_status = extractedLead.pre_approval_status;
++        if (extractedLead.property_interest) updates.property_interest = extractedLead.property_interest;
++        if (extractedLead.qualification_score) updates.qualification_score = extractedLead.qualification_score;
++        if (extractedLead.notes) updates.notes = (existingLead.data.notes ? existingLead.data.notes + '\n' : '') + `[AI Call Summary]: ${extractedLead.notes}`;
++        updates.stage = 'contacted';
++        updates.updated_at = new Date().toISOString();
++
++        if (existingLead.table === 'team_leads') {
++          await sb.from('team_leads').update(updates).eq('id', finalLeadId);
++        } else {
++          await sb.from('leads').update(updates).eq('id', finalLeadId);
++        }
+ 
+-    const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
++        // Sync to MongoDB DataSnapshot pe_leads
++        await syncLeadToSnapshot(AGENT_EMAIL, finalLeadId, {
++          ...updates,
++          pipeline_stage: 'Contacted',
++          status: 'Contacted'
++        });
++      } else if (phone) {
++        // Create new lead (inbound call)
++        console.log(`➕ Creating new lead in database for inbound phone: ${phone}`);
++        
++        const newLeadRecord = {
++          name: extractedLead.name || 'New Inbound Lead',
++          phone: phone,
++          email: extractedLead.email || '',
++          property_interest: extractedLead.property_interest || 'General Inquiry',
++          budget: extractedLead.budget || 'Flexible',
++          bhk_preference: extractedLead.bhk_preference || 'N/A',
++          pre_approval_status: extractedLead.pre_approval_status || 'N/A',
++          qualification_score: extractedLead.qualification_score || 50,
++          source: 'AI Inbound Call',
++          status: 'New',
++          notes: extractedLead.notes ? `[AI Inbound Call Summary]: ${extractedLead.notes}` : 'Created from AI Inbound Call'
++        };
+ 
+-    if (platform === 'instagram') {
+-      const igId = pageId || process.env.META_IG_USER_ID;
+-      if (!igId) return res.status(400).json({ error: 'META_IG_USER_ID not set' });
++        let savedSbLead = null;
++        try {
++          const { data, error } = await sb.from('leads').insert([newLeadRecord]).select().single();
++          if (data) savedSbLead = data;
++        } catch (e) {}
+ 
+-      // Step 1: Create container
+-      const containerRes = await fetch(`https://graph.facebook.com/v19.0/${igId}/media`, {
+-        method: 'POST',
+-        headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ image_url: mediaUrl, caption, access_token: accessToken })
+-      });
+-      const container = await containerRes.json();
+-      if (!container.id) return res.status(400).json({ error: 'IG container failed', detail: container });
+-
+-      // Step 2: Publish
+-      const publishRes = await fetch(`https://graph.facebook.com/v19.0/${igId}/media_publish`, {
+-        method: 'POST',
+-        headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ creation_id: container.id, access_token: accessToken })
+-      });
+-      const published = await publishRes.json();
+-      return res.json({ success: !!published.id, post_id: published.id, platform: 'instagram' });
+-    }
++        let savedTeamLead = null;
++        try {
++          const newTeamLeadRecord = {
++            team_id: AGENT_EMAIL,
++            name: newLeadRecord.name,
++            phone: newLeadRecord.phone,
++            email: newLeadRecord.email,
++            property_interest: newLeadRecord.property_interest,
++            budget: newLeadRecord.budget,
++            source: newLeadRecord.source,
++            stage: 'contacted',
++            notes: newLeadRecord.notes
++          };
++          const { data, error } = await sb.from('team_leads').insert([newTeamLeadRecord]).select().single();
++          if (data) savedTeamLead = data;
++        } catch (e) {}
+ 
+-    if (platform === 'facebook') {
+-      const fbPageId = pageId || process.env.META_FB_PAGE_ID;
+-      if (!fbPageId) return res.status(400).json({ error: 'META_FB_PAGE_ID not set' });
++        try {
++          let snapshot = await DataSnapshot.findOne({ email: AGENT_EMAIL });
++          if (!snapshot) snapshot = new DataSnapshot({ email: AGENT_EMAIL, data: {} });
++          if (!snapshot.data) snapshot.data = {};
++          
++          let leads = snapshot.data.pe_leads || [];
++          if (typeof leads === 'string') {
++            try { leads = JSON.parse(leads); } catch (e) { leads = []; }
++          }
+ 
+-      const postRes = await fetch(`https://graph.facebook.com/v19.0/${fbPageId}/photos`, {
+-        method: 'POST',
+-        headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ url: mediaUrl, caption, access_token: accessToken, published: true })
+-      });
+-      const post = await postRes.json();
+-      return res.json({ success: !!post.post_id, post_id: post.post_id, platform: 'facebook' });
+-    }
++          const mongoLead = {
++            id: savedTeamLead?.id || savedSbLead?.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
++            name: newLeadRecord.name,
++            phone: newLeadRecord.phone,
++            email: newLeadRecord.email,
++            property_interest: newLeadRecord.property_interest,
++            budget: newLeadRecord.budget,
++            bhk_preference: newLeadRecord.bhk_preference,
++            pre_approval_status: newLeadRecord.pre_approval_status,
++            qualification_score: newLeadRecord.qualification_score,
++            source: newLeadRecord.source,
++            status: 'Contacted',
++            pipeline_stage: 'Contacted',
++            notes: newLeadRecord.notes,
++            created_at: new Date().toISOString()
++          };
+ 
+-    return res.status(400).json({ error: 'Platform not supported yet: ' + platform });
+-  } catch (error) {
+-    console.error('Social Publish Error:', error.message);
+-    res.status(500).json({ error: error.message });
+-  }
+-});
++          leads.unshift(mongoLead);
++          snapshot.data.pe_leads = leads;
++          snapshot.markModified('data');
++          await snapshot.save();
++          console.log(`✅ Saved new inbound lead ${mongoLead.id} to MongoDB snapshot`);
++        } catch (mErr) {
++          console.error('❌ Failed to save new inbound lead to MongoDB:', mErr.message);
++        }
++      }
+ 
+-// ── POST /api/send-email — secure email proxy ────────────────────────────────
+-app.post('/api/send-email', protect, async (req, res) => {
+-  try {
+-    const { to, subject, message, html } = req.body;
+-    if (!to || !subject) return res.status(400).json({ error: 'to and subject required' });
++      // 4. Format and Sync Call Log and Transcript to MongoDB Snapshot pe_calls
++      const leadNameForCall = (existingLead?.data?.name) || extractedLead.name || 'New Inbound Lead';
++      
++      const minutes = Math.floor(duration / 60);
++      const seconds = Math.floor(duration % 60);
++      const durationStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
++      
++      const messages = event?.message?.call?.messages || event?.message?.messages || [];
++      let formattedTranscript = [];
++      if (messages.length > 0) {
++        formattedTranscript = messages.map(m => ({
++          role: m.role === 'assistant' ? 'assistant' : 'user',
++          content: m.message || m.content || ''
++        }));
++      } else if (typeof transcript === 'string' && transcript.length > 0) {
++        formattedTranscript = transcript.split('\n').map(line => {
++          const parts = line.split(':');
++          if (parts.length >= 2) {
++            const role = parts[0].trim().toLowerCase().includes('assistant') ? 'assistant' : 'user';
++            const content = parts.slice(1).join(':').trim();
++            return { role, content };
++          }
++          return { role: 'user', content: line.trim() };
++        }).filter(t => t.content);
++      }
+ 
+-    console.log(`📧 API Proxy: Sending email to [${to}] | Subject: ${subject}`);
+-    const result = await sendEmail({ to, subject, message, html });
+-    res.json(result);
+-  } catch (error) {
+-    console.error('❌ Email Proxy Error:', error.message);
+-    res.status(500).json({ success: false, error: error.message });
+-  }
+-});
++      const urgencyScore = extractedLead.qualification_score ? Math.min(10, Math.max(1, Math.round(extractedLead.qualification_score / 10))) : 5;
++      
++      let callOutcome = 'Prospective';
++      if (duration < 10 || isFailed) {
++        callOutcome = 'No Answer';
++      } else if (transcript.toLowerCase().includes('bookvisit') || transcript.toLowerCase().includes('visit booked') || transcript.toLowerCase().includes('confirmed')) {
++        callOutcome = 'Confirmed';
++      }
+ 
+-// ──────────────────────────────────────────────────────────────────────────────
+-// SERVER
+-// ──────────────────────────────────────────────────────────────────────────────
+-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+-  const PORT = process.env.PORT || 5000;
+-  app.listen(PORT, () => console.log(`Zorvo Server running on port ${PORT}`));
+-}
++      await syncCallLogToSnapshot(AGENT_EMAIL, {
++        id: call.id || ('call_' + Date.now()),
++        lead_name: leadNameForCall,
++        urgency: urgencyScore,
++        outcome: callOutcome,
++        duration: durationStr,
++        transcript: formattedTranscript,
++        created_at: new Date().toISOString()
++      });
+ 
++      // 5. Send Bell Notification to Dashboard
++      await notifyAgent(AGENT_EMAIL, {
++        title: `📞 Call Ended: ${leadNameForCall}`,
++        description: `Duration: ${durationStr} · Status: ${callOutcome} · Score: ${urgencyScore}/10`,
++        type: 'info',
++        icon: 'fas fa-phone-alt'
++      });
+ 
++      if ((isFailed || duration < 10) && phone) {
++        console.log(`⚠️  Detected call failure/no-answer for ${phone} (Reason: ${endedReason}). Scheduling retries.`);
++        const leadMeta = { 
++          phone, 
++          name: call.customer?.name, 
++          id: leadId, 
++          email: metadata.email,
++          property_interest: metadata.interest || '',
++          budget: metadata.budget || ''
++        };
++        scheduleRetry(leadMeta, triggerAICall, triggerFailoverMessages);
++      }
+ 
+-// =============================================================================
+-// VAPI WEBHOOK — Receives all call events from VAPI
+-// Set this URL in your VAPI dashboard: /api/vapi/webhook
+-// =============================================================================
+-app.post('/api/vapi/webhook', async (req, res) => {
+-  const event = req.body;
+-  const type = event?.message?.type || event?.type;
++      // ── Schedule email follow-ups after call ends (Day 0 instant, 1, 2, 3)
++      if (phone) {
++        const leadEmail = metadata.email || (leadId ? await getLeadEmail(leadId) : null);
++        const leadForFollowup = {
++          phone,
++          email: leadEmail || null,
++          name:  call.customer?.name || 'there',
++          property_interest: call.metadata?.interest || metadata.interest || '',
++          budget: call.metadata?.budget || metadata.budget || '',
++          id: leadId,
++        };
++        let followupProperties = [];
++        try {
++          const snap = await DataSnapshot.findOne({ email: AGENT_EMAIL });
++          if (snap?.data?.pe_properties) {
++            followupProperties = typeof snap.data.pe_properties === 'string'
++              ? JSON.parse(snap.data.pe_properties)
++              : snap.data.pe_properties;
++          }
++        } catch (e) { console.error('VAPI followup property fetch error:', e.message); }
++        scheduleFollowUps(leadForFollowup, followupProperties);
++      }
++    }
+ 
+-  console.log(`📡 VAPI webhook: ${type}`);
+-  
+-  // We handle responses based on event type
+-  if (type !== 'function-call' && type !== 'assistant-request') {
+-    res.json({ received: true }); // Respond fast for non-tool/request events
+-  }
+ 
+-  try {
+-    const call = event?.message?.call || event?.call || {};
+-    const metadata = call.metadata || {};
+-    const leadId = metadata.leadId || null;
+-    const phone = call.customer?.number || null;
+-
+-    // ── call-started ────────────────────────────────────────────────────────
+-    if (type === 'call-started' || type === 'status-update' && event?.message?.status === 'in-progress') {
+-      console.log(`📞 VAPI call started → ${phone}`);
+-      if (leadId) {
+-        await updateLeadStage(leadId, 'Contacted');
+-        await syncLeadToSnapshot(AGENT_EMAIL, leadId, { pipeline_stage: 'Contacted', status: 'Contacted' });
++    // ── hang — lead hung up ──────────────────────────────────────────────────
++    else if (type === 'hang') {
++      console.log(`📵 Lead hung up: ${phone}`);
++    }e_stage: 'Contacted', status: 'Contacted' });
+       }
+       if (phone) cancelRetry(phone);
+     }

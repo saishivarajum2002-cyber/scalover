@@ -892,6 +892,27 @@ async function processVisitBooking({ agentEmail, visit, is_ai_booking }) {
   // --- BACKGROUND PROCESSING ---
   (async () => {
     try {
+      // Find listing agent details from Supabase if not the main Admin email
+      let activeAgentName = process.env.AGENT_NAME || 'Sarah Al-Rashid';
+      let activeAgentPhone = process.env.AGENT_PHONE || '+971 50 123 4567';
+      let activeAgentEmail = AGENT_EMAIL;
+
+      if (agentEmail.toLowerCase() !== AGENT_EMAIL.toLowerCase()) {
+        try {
+          const { createClient } = require('@supabase/supabase-js');
+          const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+          const { data: dbAgents } = await sb.from('team_agents').select('*').eq('email', agentEmail).maybeSingle();
+          if (dbAgents) {
+            activeAgentName = dbAgents.name;
+            activeAgentPhone = dbAgents.phone;
+            activeAgentEmail = dbAgents.email;
+            console.log(`📌 Found showing agent in Supabase for booking email: ${activeAgentName}`);
+          }
+        } catch (e) {
+          console.error('Error fetching team agent for booking confirmation:', e.message);
+        }
+      }
+
       // Save to MongoDB
       let snapshot = await DataSnapshot.findOne({ email: agentEmail });
       if (!snapshot) snapshot = new DataSnapshot({ email: agentEmail, data: { pe_bookings: [] } });
@@ -904,6 +925,38 @@ async function processVisitBooking({ agentEmail, visit, is_ai_booking }) {
       snapshot.data.pe_bookings = typeof snapshot.data.pe_bookings === 'string' ? JSON.stringify(bookings) : bookings;
       snapshot.markModified('data');
       await snapshot.save();
+
+      // Save to Admin's Master leads list snapshot so Admin owns the customer profiles
+      try {
+        let adminSnapshot = await DataSnapshot.findOne({ email: AGENT_EMAIL });
+        if (adminSnapshot) {
+          let adminLeads = adminSnapshot.data.pe_leads || [];
+          if (typeof adminLeads === 'string') { try { adminLeads = JSON.parse(adminLeads); } catch (e) { adminLeads = []; } }
+          
+          // Check if lead already exists in Admin snapshot
+          const leadExists = adminLeads.some(l => l.phone === visit.client_phone || l.email === visit.client_email);
+          if (!leadExists) {
+            const newMasterLead = {
+              id: visit.lead_id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+              name: visit.client_name,
+              phone: visit.client_phone,
+              email: visit.client_email || '',
+              property_interest: visit.property_name,
+              pipeline_stage: 'Negotiation',
+              status: 'Negotiation',
+              source: 'Website Showing',
+              created_at: new Date().toISOString()
+            };
+            adminLeads.unshift(newMasterLead);
+            adminSnapshot.data.pe_leads = typeof adminSnapshot.data.pe_leads === 'string' ? JSON.stringify(adminLeads) : adminLeads;
+            adminSnapshot.markModified('data');
+            await adminSnapshot.save();
+            console.log(`📌 Master Lead synced to Admin Snapshot for ${visit.client_name}`);
+          }
+        }
+      } catch (adminErr) {
+        console.error('Error syncing lead to Admin snapshot:', adminErr.message);
+      }
 
       // ── Notify Agent (Dashboard & Email)
       await notifyAgent(agentEmail, {
@@ -933,16 +986,13 @@ async function processVisitBooking({ agentEmail, visit, is_ai_booking }) {
           }
         } catch (e) { console.error('Lookup address error:', e.message); }
 
-        const agentName = process.env.AGENT_NAME || 'Sarah Al-Rashid';
-        const agentPhone = process.env.AGENT_PHONE || '+971 50 123 4567';
         const agencyName = process.env.COMPANY_NAME || 'Zorvo Realty';
-
         const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(propertyAddress)}`;
 
         await sendEmail({
           to: visit.client_email,
           subject: `🏡 CONFIRMED: Your property viewing at ${visit.property_name}`,
-          message: `Hi ${visit.client_name},\n\nYour property viewing for ${visit.property_name} is confirmed!\n\nDate: ${visit.visit_date}\nTime: ${visit.visit_time}\nAddress: ${propertyAddress}\n\nAgent Contact Info:\nName: ${agentName}\nAgency: ${agencyName}\nPhone: ${agentPhone}\nEmail: ${AGENT_EMAIL}\n\nWe look forward to meeting you!`,
+          message: `Hi ${visit.client_name},\n\nYour property viewing for ${visit.property_name} is confirmed!\n\nDate: ${visit.visit_date}\nTime: ${visit.visit_time}\nAddress: ${propertyAddress}\n\nAgent Contact Info:\nName: ${activeAgentName}\nAgency: ${agencyName}\nPhone: ${activeAgentPhone}\nEmail: ${activeAgentEmail}\n\nWe look forward to meeting you!`,
           html: `
 <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;background:#0a0e14;border-radius:12px;overflow:hidden;border:1px solid #c5a059">
   <div style="background:linear-gradient(135deg,#1a1a18,#0f2044);padding:32px;text-align:center;border-bottom:2px solid #c5a059">
@@ -987,11 +1037,11 @@ async function processVisitBooking({ agentEmail, visit, is_ai_booking }) {
       <h3 style="margin:0 0 16px;color:#c5a059;font-size:15px;font-weight:600;letter-spacing:1px">📋 ASSIGNED REAL ESTATE ADVISOR</h3>
       <div style="display:flex;align-items:center;gap:16px">
         <div>
-          <div style="font-weight:bold;font-size:16px;color:#faf8f4">${agentName}</div>
-          <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:8px">${agencyName} Elite Partner</div>
+          <div style="font-weight:bold;font-size:16px;color:#faf8f4">${activeAgentName}</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:8px">${agencyName} Advisor</div>
           <div style="font-size:13px;color:rgba(255,255,255,0.8);line-height:1.6">
-            📱 Phone: <strong>${agentPhone}</strong><br>
-            ✉️ Email: <strong>${AGENT_EMAIL}</strong>
+            📱 Phone: <strong>${activeAgentPhone}</strong><br>
+            ✉️ Email: <strong>${activeAgentEmail}</strong>
           </div>
         </div>
       </div>
@@ -1006,9 +1056,10 @@ async function processVisitBooking({ agentEmail, visit, is_ai_booking }) {
         });
       }
 
-      // Trigger AI Confirmation Call
+      // Trigger AI Confirmation Call (pass dynamic agent values)
       if (!is_ai_booking && visit.client_phone) {
-        await makeConfirmationCall(visit);
+        const { makeConfirmationCall } = require('../services/vapi');
+        await makeConfirmationCall({ ...visit, assigned_agent_name: activeAgentName });
       }
     } catch (err) {
       console.error('❌ Background Task Error:', err.message);
@@ -2020,8 +2071,75 @@ app.get('/api/sync', async (req, res) => {
   try {
     const { email } = req.query;
     if (!email) return res.status(400).json({ error: 'Email required' });
+
+    // 1. Fetch current agent's snapshot
     const snapshot = await DataSnapshot.findOne({ email });
-    res.json(snapshot && snapshot.data ? snapshot.data : {});
+    const localData = snapshot && snapshot.data ? { ...snapshot.data } : {};
+
+    // 2. If it is the main Admin agent, dynamically consolidate properties from all agents!
+    if (email.toLowerCase() === AGENT_EMAIL.toLowerCase()) {
+      let adminProps = [];
+      if (localData.pe_properties) {
+        try {
+          adminProps = typeof localData.pe_properties === 'string'
+            ? JSON.parse(localData.pe_properties)
+            : localData.pe_properties;
+        } catch (e) { adminProps = []; }
+      }
+
+      // Mark Admin's own properties
+      adminProps = adminProps.map(p => {
+        p.agent_email = AGENT_EMAIL;
+        p.agent_name = AGENT_NAME;
+        p.agent_phone = process.env.AGENT_PHONE || '+1 754 291 7462';
+        return p;
+      });
+
+      // Get team agents from Supabase to tag their names/phones correctly
+      const agentMap = {};
+      try {
+        const { createClient } = require('@supabase/supabase-js');
+        const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+        const { data: dbAgents } = await sb.from('team_agents').select('*').eq('team_id', AGENT_EMAIL);
+        if (dbAgents && dbAgents.length) {
+          dbAgents.forEach(a => {
+            agentMap[a.email.toLowerCase()] = a;
+          });
+        }
+      } catch (supabaseErr) {
+        console.error('Failed to load team agents from Supabase for sync tagging:', supabaseErr.message);
+      }
+
+      // Get all other snapshots in MongoDB
+      const otherSnapshots = await DataSnapshot.find({ email: { $ne: email } });
+      const consolidatedProps = [...adminProps];
+
+      for (const snap of otherSnapshots) {
+        if (snap.data && snap.data.pe_properties) {
+          try {
+            const agentProps = typeof snap.data.pe_properties === 'string'
+              ? JSON.parse(snap.data.pe_properties)
+              : snap.data.pe_properties;
+
+            if (Array.isArray(agentProps)) {
+              const matchedAgent = agentMap[snap.email.toLowerCase()] || {};
+              agentProps.forEach(p => {
+                p.agent_email = snap.email;
+                p.agent_name = matchedAgent.name || snap.email.split('@')[0];
+                p.agent_phone = matchedAgent.phone || '+971 50 123 4567';
+                consolidatedProps.push(p);
+              });
+            }
+          } catch (pErr) {
+            console.error(`Error parsing properties from agent snapshot ${snap.email}:`, pErr.message);
+          }
+        }
+      }
+
+      localData.pe_properties = JSON.stringify(consolidatedProps);
+    }
+
+    res.json(localData);
   } catch (error) {
     res.status(500).json({ error: 'Database Error: ' + error.message });
   }
@@ -2035,6 +2153,55 @@ app.post('/api/sync', protect, async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Database Error: ' + error.message });
+  }
+});
+
+// ── POST /api/login — Multi-Agent Auth ──────────────────────────────────────────
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+
+    // 1. Check main Admin agent
+    if (email.toLowerCase() === AGENT_EMAIL.toLowerCase()) {
+      if (password === 'zorvo123' || password === (process.env.AGENT_PASSWORD || 'zorvo123')) {
+        return res.json({
+          success: true,
+          name: AGENT_NAME,
+          email: AGENT_EMAIL,
+          role: 'admin'
+        });
+      }
+    }
+
+    // 2. Check team agents in Supabase
+    try {
+      const { createClient } = require('@supabase/supabase-js');
+      const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+      const { data: matched, error } = await sb
+        .from('team_agents')
+        .select('*')
+        .eq('email', email)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (matched && matched.password === password) {
+        return res.json({
+          success: true,
+          name: matched.name,
+          email: matched.email,
+          role: 'agent'
+        });
+      }
+    } catch (dbErr) {
+      console.error('Supabase agent login error:', dbErr.message);
+    }
+
+    res.status(401).json({ error: 'Incorrect email or password.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Login Error: ' + error.message });
   }
 });
 
@@ -2369,12 +2536,31 @@ app.post('/api/vapi/webhook', async (req, res) => {
       }
 
       if (fnName === 'transferCall') {
-        const transferPhone = process.env.TRANSFER_NUMBER || process.env.AGENT_PHONE;
+        const agentEmailFromMetadata = metadata.agentId || metadata.agentEmail || AGENT_EMAIL;
+        let transferPhone = process.env.TRANSFER_NUMBER || process.env.AGENT_PHONE;
+        let recipientEmail = AGENT_EMAIL;
+        let assignedAgentName = AGENT_NAME;
+
+        if (agentEmailFromMetadata.toLowerCase() !== AGENT_EMAIL.toLowerCase()) {
+          try {
+            const { createClient } = require('@supabase/supabase-js');
+            const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+            const { data: matched } = await sb.from('team_agents').select('*').eq('email', agentEmailFromMetadata).maybeSingle();
+            if (matched) {
+              transferPhone = matched.phone;
+              recipientEmail = matched.email;
+              assignedAgentName = matched.name;
+              console.log(`📞 Found team agent for Vapi transfer: ${matched.name} (${matched.phone})`);
+            }
+          } catch (e) {
+            console.error('Error matching team agent for Vapi transfer:', e.message);
+          }
+        }
         
         // 1. Notify agent via Email
         try {
           await sendEmail({
-            to: AGENT_EMAIL,
+            to: recipientEmail,
             subject: `🔥 URGENT: Transfer Request from VAPI AI — Lead ${phone}`,
             message: `VAPI AI transferred a lead who requested a human agent.\n\nLead Phone: ${phone}\nReason: ${fnArgs.reason || 'requested human'}\n\nPlease call them back immediately!\n\n— PropEdge AI`,
             html: `<div style="font-family:Arial,sans-serif;max-width:600px;background:#0a0e14;color:#faf8f4;padding:24px;border-radius:8px;border:2px solid #e05060"><h2 style="color:#e05060;margin:0 0 16px">🔥 URGENT: Transfer Request</h2><p>A lead has requested a human agent via VAPI AI.</p><table style="width:100%;border-collapse:collapse"><tr><td style="padding:8px 0;color:rgba(255,255,255,0.5)">Lead Phone:</td><td style="padding:8px 0;color:#faf8f4;font-weight:bold">${phone}</td></tr><tr><td style="padding:8px 0;color:rgba(255,255,255,0.5)">Reason:</td><td style="padding:8px 0;color:#faf8f4">${fnArgs.reason || 'requested human'}</td></tr></table><p style="margin-top:16px;color:#e05060;font-weight:bold">Please call them back immediately!</p></div>`

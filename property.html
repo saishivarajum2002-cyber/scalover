@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Exclusive Property Viewing — Zorvo Realty</title>
+  
+  <!-- Fonts & Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- International Phone Input -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.4/build/css/intlTelInput.css">
+  <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.4/build/js/intlTelInput.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0a0e14;
+      --card-bg: rgba(22, 28, 38, 0.6);
+      --gold: #c5a059;
+      --gold-light: #e5c483;
+      --text: #faf8f4;
+      --text-muted: rgba(250, 248, 244, 0.6);
+      --border: rgba(197, 160, 89, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Luxury Header */
+    header {
+      padding: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(10, 14, 20, 0.95);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+    }
+
+    .logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+      letter-spacing: 1px;
+    }
+
+    .logo span {
+      color: var(--gold);
+      font-weight: 300;
+    }
+
+    .back-btn {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: color 0.3s;
+    }
+
+    .back-btn:hover {
+      color: var(--gold);
+    }
+
+    /* Hero / Listing Section */
+    .container {
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 40px;
+    }
+
+    @media (max-width: 900px) {
+      .container {
+        grid-template-columns: 1fr;
+        margin: 20px auto;
+      }
+    }
+
+    /* Left Side: Property details */
+    .property-showcase {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .hero-image-wrapper {
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      aspect-ratio: 16/9;
+      background: #121620;
+    }
+
+    .hero-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.6s;
+    }
+
+    .hero-image-wrapper:hover .hero-image {
+      transform: scale(1.03);
+    }
+
+    .price-badge {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(10, 14, 20, 0.85);
+      border: 1px solid var(--gold);
+      padding: 10px 20px;
+      border-radius: 30px;
+      backdrop-filter: blur(8px);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--gold-light);
+    }
+
+    .prop-info-header h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 36px;
+      font-weight: 400;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .prop-address {
+      color: var(--text-muted);
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .prop-address i {
+      color: var(--gold);
+    }
+
+    /* Core Specs */
+    .specs-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 30px;
+    }
+
+    .spec-item {
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      transition: border 0.3s;
+    }
+
+    .spec-item:hover {
+      border-color: var(--border);
+    }
+
+    .spec-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .spec-value {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .prop-description {
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.03);
+      padding: 30px;
+      border-radius: 16px;
+    }
+
+    .section-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 22px;
+      margin-bottom: 16px;
+      color: var(--gold-light);
+      border-left: 3px solid var(--gold);
+      padding-left: 12px;
+    }
+
+    .prop-description p {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 15px;
+      line-height: 1.8;
+    }
+
+    /* Right Side: Booking Form Card */
+    .booking-card {
+      background: linear-gradient(145deg, rgba(18, 22, 32, 0.95), rgba(10, 14, 20, 0.98));
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      position: sticky;
+      top: 100px;
+      height: fit-content;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .booking-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 24px;
+      color: #fff;
+      margin-bottom: 6px;
+      text-align: center;
+    }
+
+    .booking-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--gold-light);
+      margin-bottom: 8px;
+    }
+
+    .form-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 14px;
+      transition: all 0.3s;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--gold);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Custom style for intl-tel-input */
+    .iti {
+      width: 100%;
+    }
+
+    .b-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .b-slot {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 10px 4px;
+      text-align: center;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.25s;
+    }
+
+    .b-slot:hover {
+      border-color: var(--gold);
+      background: rgba(197, 160, 89, 0.05);
+    }
+
+    .b-slot.active {
+      background: var(--gold);
+      color: #000;
+      font-weight: 600;
+      border-color: var(--gold);
+    }
+
+    .submit-btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--gold), #a37f3f);
+      border: none;
+      color: #000;
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 24px;
+      transition: transform 0.2s, opacity 0.3s;
+      letter-spacing: 0.5px;
+    }
+
+    .submit-btn:hover {
+      transform: translateY(-2px);
+      opacity: 0.95;
+    }
+
+    /* Agent Profile Footer section */
+    .agent-card {
+      margin-top: 40px;
+      padding-top: 30px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .agent-avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: 1px solid var(--gold);
+      background: #111;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    .agent-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .agent-title {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: rgba(22, 28, 38, 0.95);
+      border: 1px solid var(--gold);
+      color: #fff;
+      padding: 16px 24px;
+      border-radius: 8px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+      z-index: 1000;
+      display: none;
+      font-size: 14px;
+      backdrop-filter: blur(10px);
+    }
+
+    #toast.success {
+      border-color: #2ecc8a;
+    }
+
+    #toast.error {
+      border-color: #ff4d4d;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Header -->
+  <header>
+    <a href="/" class="logo">Sarah <span>Al-Rashid</span></a>
+    <a href="/" class="back-btn"><i class="fas fa-chevron-left"></i> Back to Listings</a>
+  </header>
+
+  <!-- Showcase / Details Grid -->
+  <div class="container">
+    
+    <!-- Showcase Info -->
+    <div class="property-showcase">
+      <div class="hero-image-wrapper">
+        <img id="prop-image" class="hero-image" src="https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=1200&q=80" alt="Premium Listing">
+        <div id="prop-price" class="price-badge">$2,400,000</div>
+      </div>
+
+      <div class="prop-info-header">
+        <h1 id="prop-name">Palm Villa Estate</h1>
+        <div class="prop-address">
+          <i class="fas fa-map-marker-alt"></i>
+          <span id="prop-address-text">Palm Jumeirah, Dubai</span>
+        </div>
+      </div>
+
+      <!-- Core specs grid -->
+      <div class="specs-grid">
+        <div class="spec-item">
+          <div class="spec-label">🛌 Bedrooms</div>
+          <div id="spec-beds" class="spec-value">5+</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">🚿 Bathrooms</div>
+          <div id="spec-baths" class="spec-value">5+</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">📐 Area</div>
+          <div id="spec-area" class="spec-value">6,800 ft²</div>
+        </div>
+      </div>
+
+      <!-- Description Block -->
+      <div class="prop-description">
+        <div class="section-title">Property Narrative</div>
+        <p id="prop-description-text">
+          Extraordinary beachfront villa with private beach, landscaped gardens, and infinity pool. Masterpiece of modern architecture set in the prestigious Palm Jumeirah area, designed with the highest specifications and bespoke premium furnishings.
+        </p>
+      </div>
+    </div>
+
+    <!-- Booking Form Card -->
+    <div class="booking-card">
+      <div class="booking-title">Schedule a Viewing</div>
+      <div class="booking-subtitle">A professional real estate advisor will host your tour and a qualified voice call confirmation will be placed.</div>
+
+      <div id="booking-form-body">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" id="bk-name" class="form-input" placeholder="Type your full name..." required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Phone Number</label>
+          <input type="tel" id="bk-phone" class="form-input" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" id="bk-email" class="form-input" placeholder="Type your email address..." required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Preferred Date</label>
+          <input type="date" id="bk-date" class="form-input" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Select Time Slot</label>
+          <div class="b-grid" id="slots-grid"></div>
+        </div>
+
+        <button class="submit-btn" onclick="submitBooking()"><i class="fas fa-calendar-check"></i> Request Guided Viewing</button>
+      </div>
+
+      <!-- Booking success display state -->
+      <div id="booking-success-block" style="display:none; text-align:center; padding:20px 0">
+        <div style="font-size:48px; color:var(--gold); margin-bottom:16px"><i class="fas fa-circle-check"></i></div>
+        <h2 style="font-family:'Playfair Display',serif; font-size:22px; color:#fff; margin-bottom:12px">Viewing Confirmed!</h2>
+        <p id="success-msg" style="font-size:14px; color:var(--text-muted); line-height:1.7; margin-bottom:20px"></p>
+        <div style="font-size:12px; color:#2ecc8a; padding:12px; background:rgba(46,204,138,0.06); border:1px solid rgba(46,204,138,0.2); border-radius:6px">
+          <i class="fas fa-phone-volume"></i> Our luxury voice agent will dial you in a few seconds to verify your showing time slot!
+        </div>
+      </div>
+
+      <!-- Agent profile summary footer card -->
+      <div class="agent-card">
+        <div class="agent-avatar">👑</div>
+        <div>
+          <div class="agent-name">Sarah Al-Rashid</div>
+          <div class="agent-title">Zorvo Realty Elite Advisor</div>
+          <div style="font-size:11px; color:var(--gold); margin-top:2px"><i class="fas fa-shield-halved"></i> RERA: RE-2024-00847</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Toast element -->
+  <div id="toast"></div>
+
+  <script>
+    // Demo backup database array
+    const DEMO_PROPERTIES = [
+      { id: 'skyview', name: 'Skyview Residences', address: 'Downtown, Dubai', price: 1200000, bedrooms: '3', bathrooms: '2', area_sqft: 2100, status: 'For Sale', image: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1200&q=80', description: "Masterpiece of modern architecture set against Dubai's skyline with customized infinity views." },
+      { id: 'marina', name: 'Marina Tower Suite', address: 'Dubai Marina', price: 850000, bedrooms: '2', bathrooms: '2', area_sqft: 1450, status: 'For Sale', image: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=1200&q=80', description: 'Uninterrupted sea views with wraparound balcony in the heart of Dubai Marina.' },
+      { id: 'palm', name: 'Palm Villa Estate', address: 'Palm Jumeirah', price: 2400000, bedrooms: '5+', bathrooms: '5+', area_sqft: 6800, status: 'Pending', image: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=1200&q=80', description: 'Extraordinary beachfront villa with private beach, landscaped gardens, and infinity pool.' },
+      { id: 'loft', name: 'Downtown Loft', address: 'Business Bay', price: 420000, bedrooms: '1', bathrooms: '1', area_sqft: 750, status: 'Sold', image: 'https://images.unsplash.com/photo-1502672023488-70e25813eb80?w=1200&q=80', description: 'Sophisticated urban loft designed with industrial details in the heart of Business Bay.' }
+    ];
+
+    let currentProperty = DEMO_PROPERTIES[2]; // Default to Palm Villa
+    let selectedSlot = null;
+
+    // Show custom prompt message toasts
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.className = isError ? 'error' : 'success';
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 4000);
+    }
+
+    // Populate the viewing slots list
+    function populateSlots() {
+      const slots = ['10:00 AM', '11:00 AM', '1:00 PM', '2:00 PM', '4:00 PM', '5:00 PM'];
+      const grid = document.getElementById('slots-grid');
+      selectedSlot = null;
+      grid.innerHTML = slots.map(s => `<div class="b-slot" onclick="selectSlot(this,'${s}')">${s}</div>`).join('');
+    }
+
+    function selectSlot(el, slot) {
+      selectedSlot = slot;
+      document.querySelectorAll('.b-slot').forEach(s => s.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    // Load property based on URL parameter
+    async function loadProperty() {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('id');
+      
+      if (!id) {
+        bindProperty(DEMO_PROPERTIES[2]); // fallback to Palm
+        return;
+      }
+
+      // Check if it is a fallback demo ID directly
+      const fallback = DEMO_PROPERTIES.find(p => p.id === id || p.name.toLowerCase().includes(id.toLowerCase()));
+      if (fallback) {
+        currentProperty = fallback;
+        bindProperty(fallback);
+        return;
+      }
+
+      // Fetch dynamic active listings from backend
+      try {
+        const res = await fetch('/api/ai/properties');
+        if (res.ok) {
+          const payload = await res.json();
+          const list = payload.properties || [];
+          const matched = list.find(p => p.id === id || p.name.toLowerCase() === id.toLowerCase() || p.id?.includes(id));
+          if (matched) {
+            currentProperty = {
+              id: matched.id,
+              name: matched.name,
+              address: matched.location || 'Luxury Location',
+              price: parseFloat(matched.price?.toString().replace(/[^0-9.]/g, '')) || 1500000,
+              bedrooms: matched.features?.match(/\d+\s*BR/i)?.[0]?.replace(/\s*BR/i,'') || '3',
+              bathrooms: matched.features?.match(/\d+\s*BA/i)?.[0]?.replace(/\s*BA/i,'') || '3',
+              area_sqft: parseFloat(matched.features?.match(/\d+(?:,\d+)?\s*(?:sqft|ft²)/i)?.[0]?.replace(/[^0-9]/g,'')) || 2400,
+              description: matched.features || 'A luxury premium architectural property listing located in a prime neighborhood.',
+              image: matched.image || 'https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=1200&q=80'
+            };
+            bindProperty(currentProperty);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Property Fetch Error:', err.message);
+      }
+
+      // If no endpoint match, bind fallback
+      bindProperty(DEMO_PROPERTIES[2]);
+    }
+
+    function bindProperty(p) {
+      document.getElementById('prop-name').textContent = p.name;
+      document.title = `${p.name} — Luxury Property Tour`;
+      document.getElementById('prop-address-text').textContent = p.address;
+      document.getElementById('prop-price').textContent = typeof p.price === 'number' ? `$${p.price.toLocaleString()}` : p.price;
+      document.getElementById('spec-beds').textContent = p.bedrooms || '—';
+      document.getElementById('spec-baths').textContent = p.bathrooms || '—';
+      document.getElementById('spec-area').textContent = typeof p.area_sqft === 'number' ? `${p.area_sqft.toLocaleString()} ft²` : p.area_sqft;
+      document.getElementById('prop-description-text').textContent = p.description;
+      if (p.image) {
+        document.getElementById('prop-image').src = p.image;
+      }
+    }
+
+    // Submit booking and schedule Vapi AI confirmatory call
+    async function submitBooking() {
+      const name = document.getElementById('bk-name').value.trim();
+      const phone = window.itiInstance ? window.itiInstance.getNumber() : document.getElementById('bk-phone').value.trim();
+      const email = document.getElementById('bk-email').value.trim();
+      const date = document.getElementById('bk-date').value;
+
+      if (!name || !phone || !email || !date || !selectedSlot) {
+        showToast('All fields and showing slot are required.', true);
+        return;
+      }
+
+      const bookingPayload = {
+        client_name: name,
+        client_phone: phone,
+        client_email: email,
+        property_name: currentProperty.name,
+        visit_date: date,
+        visit_time: selectedSlot,
+        status: 'pending',
+        source: 'Website link'
+      };
+
+      // Show immediate aesthetic success state to client
+      document.getElementById('booking-form-body').style.display = 'none';
+      document.getElementById('success-msg').innerHTML = `Viewing request for <strong>${currentProperty.name}</strong> has been scheduled.<br><strong>Date:</strong> ${date} · <strong>Time:</strong> ${selectedSlot}<br><br>Confirmation details are being delivered to your email: <strong>${email}</strong>.`;
+      document.getElementById('booking-success-block').style.display = 'block';
+
+      try {
+        const res = await fetch('/api/visits', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-api-secret': 'zorvo_secret_2026'
+          },
+          body: JSON.stringify({ 
+            agentEmail: 'saishivaraju.m2002@gmail.com', 
+            visit: bookingPayload 
+          })
+        });
+
+        if (res.ok) {
+          showToast('Visit scheduled successfully! Ringing Vapi AI confirmatory voice...');
+        } else {
+          console.warn('Booking POST response is not OK');
+        }
+      } catch (err) {
+        console.error('Failed to trigger database persistence:', err.message);
+      }
+    }
+
+    window.onload = () => {
+      // Initialize phone field
+      const phoneInput = document.getElementById('bk-phone');
+      if (phoneInput) {
+        window.itiInstance = window.intlTelInput(phoneInput, {
+          initialCountry: "ae",
+          separateDialCode: true,
+          preferredCountries: ["ae", "us", "in", "gb"],
+          utilsScript: "https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.4/build/js/utils.js"
+        });
+      }
+
+      // Set default showing date to tomorrow
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      document.getElementById('bk-date').value = tomorrow.toISOString().split('T')[0];
+
+      populateSlots();
+      loadProperty();
+    };
+  </script>
+</body>
+
+</html>

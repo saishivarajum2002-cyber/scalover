@@ -4827,6 +4827,23 @@
       <!-- DASHBOARD -->
       <div class="panel active" id="panel-dashboard">
 
+        <!-- Header Selector for Admin -->
+        <div id="admin-agent-selector-container" style="display:none; align-items:center; justify-content:space-between; margin-bottom:20px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 20px">
+          <div>
+            <div style="font-size:18px; font-weight:800; color:#fff">🏢 Consolidated Team Dashboard</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:2px">Select an advisor to filter dashboard stats, or view consolidated analytics.</div>
+          </div>
+          <select id="admin-dashboard-agent-select" onchange="changeDashboardAgentFilter(this.value)" style="background:var(--surface2); color:#fff; border:1px solid var(--border); border-radius:8px; padding:8px 16px; outline:none; font-family:var(--font-body); font-weight:600; cursor:pointer">
+            <option value="">Consolidated View (All Agents)</option>
+            <option value="saishivaraju.m2002@gmail.com">Sarah Al-Rashid (Team Lead)</option>
+            <option value="elena@zorvo.test">Elena Rostova</option>
+            <option value="marcus@zorvo.test">Marcus Vance</option>
+            <option value="aisha@zorvo.test">Aisha Rahman</option>
+            <option value="vikram@zorvo.test">Vikram Singh</option>
+            <option value="chloe@zorvo.test">Chloe Dubois</option>
+          </select>
+        </div>
+
         <!-- DAILY ACTION PLAN -->
         <div class="card" style="margin-bottom:20px; border-color: var(--accent2)">
           <div class="card-header" style="background: rgba(224, 120, 48, .05)">
@@ -5590,6 +5607,31 @@
         <div class="team-grid" id="team-agents-grid"
           style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:20px">
           <!-- Filled by renderTeam() -->
+        </div>
+
+        <!-- TEAM REVENUE & PERFORMANCE BREAKDOWN -->
+        <div class="card" style="margin-top:24px" id="team-revenue-card">
+          <div class="card-header">
+            <div class="card-title">💰 Team Sales & Advisor Performance</div>
+            <div style="font-size:12px; color:var(--muted)">Consolidated Sales & Commission breakdown per advisor</div>
+          </div>
+          <div class="card-body" style="padding:0">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Advisor</th>
+                  <th>Coverage Area</th>
+                  <th>Active Properties</th>
+                  <th>Closed Deals</th>
+                  <th>Total Sold Revenue</th>
+                  <th>Estimated Commission (3%)</th>
+                </tr>
+              </thead>
+              <tbody id="team-performance-tbody">
+                <!-- Filled dynamically by JS -->
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <!-- ── CALL LOG TABLE ── -->
@@ -6649,6 +6691,78 @@
     let allDocs = [], currentDocFilter = 'all', vaultView = 'grid';
 
     // ================================================================
+    // MULTI-AGENT SCRUSTED SCOPED ACCESS SYSTEM
+    // ================================================================
+    let activeDashboardAgentFilter = '';
+
+    function checkAgentSelectorVisibility() {
+      const role = localStorage.getItem('pe_role') || 'admin';
+      const container = document.getElementById('admin-agent-selector-container');
+      if (container) {
+        container.style.display = role === 'admin' ? 'flex' : 'none';
+      }
+      // Hide the entire Team Navigation tab for regular agents
+      const teamNavTab = document.querySelector('div[onclick="showPanel(\'team\',this)"]');
+      if (teamNavTab) {
+        teamNavTab.style.display = role === 'admin' ? 'flex' : 'none';
+      }
+    }
+
+    function changeDashboardAgentFilter(val) {
+      activeDashboardAgentFilter = val;
+      renderAll();
+      toast(val ? `Filtered dashboard for advisor: ${val.split('@')[0]}` : 'Consolidated Team View Activated');
+    }
+
+    function getScopedProperties() {
+      const creds = JSON.parse(localStorage.getItem('pe_access') || 'null');
+      const email = creds ? creds.username.toLowerCase() : 'saishivaraju.m2002@gmail.com';
+      const role = localStorage.getItem('pe_role') || 'admin';
+      let list = state.properties || [];
+      if (role === 'admin' && activeDashboardAgentFilter) {
+        return list.filter(p => p.agent_email && p.agent_email.toLowerCase() === activeDashboardAgentFilter.toLowerCase());
+      }
+      if (role === 'agent') {
+        return list.filter(p => p.agent_email && p.agent_email.toLowerCase() === email);
+      }
+      return list;
+    }
+
+    function getScopedBookings() {
+      const creds = JSON.parse(localStorage.getItem('pe_access') || 'null');
+      const email = creds ? creds.username.toLowerCase() : 'saishivaraju.m2002@gmail.com';
+      const role = localStorage.getItem('pe_role') || 'admin';
+      let list = state.bookings || [];
+      if (role === 'admin' && activeDashboardAgentFilter) {
+        return list.filter(b => b.agent_email && b.agent_email.toLowerCase() === activeDashboardAgentFilter.toLowerCase());
+      }
+      if (role === 'agent') {
+        return list.filter(b => b.agent_email && b.agent_email.toLowerCase() === email);
+      }
+      return list;
+    }
+
+    function getScopedLeads() {
+      const creds = JSON.parse(localStorage.getItem('pe_access') || 'null');
+      const email = creds ? creds.username.toLowerCase() : 'saishivaraju.m2002@gmail.com';
+      const role = localStorage.getItem('pe_role') || 'admin';
+      let list = state.leads || [];
+      if (role === 'admin' && activeDashboardAgentFilter) {
+        return list.filter(l => {
+          const hasVisit = (state.bookings || []).some(b => b.agent_email && b.agent_email.toLowerCase() === activeDashboardAgentFilter.toLowerCase() && (b.client_email === l.email || b.client_phone === l.phone));
+          const hasProp = (state.properties || []).some(p => p.agent_email && p.agent_email.toLowerCase() === activeDashboardAgentFilter.toLowerCase() && l.property_interest && l.property_interest.includes(p.name));
+          return hasVisit || hasProp;
+        });
+      }
+      if (role === 'agent') {
+        return list.filter(l => {
+          return (state.bookings || []).some(b => b.agent_email && b.agent_email.toLowerCase() === email && (b.client_email === l.email || b.client_phone === l.phone));
+        });
+      }
+      return list;
+    }
+
+    // ================================================================
     // INIT
     // ================================================================
     function deduplicateSystem() {
@@ -6708,6 +6822,7 @@
         state.options = DB.get('pe_opts') || { email: true, sms: true, whatsapp: true, auto: true };
 
         // 2. Initial Render (Instant)
+        checkAgentSelectorVisibility();
         renderAll();
 
         // 3. Background Sync (Non-blocking)
@@ -6719,6 +6834,7 @@
           state.properties = DB.getAll(DB.PROPERTIES);
           state.bookings = DB.getAll(DB.BOOKINGS);
           state.notifications = DB.getAll(DB.NOTIFICATIONS);
+          checkAgentSelectorVisibility();
           renderAll();
         }).catch(err => console.warn('Cloud sync unavailable:', err.message))
           .finally(() => hideLoader());
@@ -6916,9 +7032,11 @@
     // BADGES
     // ================================================================
     function renderBadges() {
-      const newLeads = state.leads.filter(l => l.status === 'New').length;
+      const scopedLeads = getScopedLeads();
+      const scopedBookings = getScopedBookings();
+      const newLeads = scopedLeads.filter(l => l.status === 'New').length;
       const unread = state.notifications.filter(n => !n.is_read).length;
-      const confirmed = state.bookings.filter(b => (b.status || '').toLowerCase() === 'confirmed').length;
+      const confirmed = scopedBookings.filter(b => (b.status || '').toLowerCase() === 'confirmed').length;
 
       const setB = (id, val) => {
         const el = document.getElementById(id);
@@ -6928,7 +7046,7 @@
         }
       };
       setB('badge-leads', newLeads);
-      setB('badge-props', state.properties.length);
+      setB('badge-props', getScopedProperties().length);
       setB('badge-bookings', confirmed);
       setB('badge-notifs', unread);
 
@@ -6945,30 +7063,34 @@
     // DASHBOARD
     // ================================================================
     function renderDashboard() {
-      const closed = state.leads.filter(l => l.status === 'Closed');
+      const scopedLeads = getScopedLeads();
+      const scopedProps = getScopedProperties();
+      const scopedBookings = getScopedBookings();
+
+      const closed = scopedLeads.filter(l => l.status === 'Closed');
       let totalRev = 0;
       closed.forEach(l => {
         let dealVal = l.budget || 550000;
         if (l.property_interest) {
-          const matchedProp = state.properties.find(p => l.property_interest.includes(p.name));
+          const matchedProp = scopedProps.find(p => l.property_interest.includes(p.name));
           if (matchedProp) dealVal = matchedProp.price;
         }
         totalRev += dealVal;
       });
-      const inProgress = state.leads.filter(l => l.pipeline_stage === 'Negotiation' || l.status === 'Contacted');
-      const inNegotiation = state.leads.filter(l => l.pipeline_stage === 'Negotiation').length;
+      const inProgress = scopedLeads.filter(l => l.pipeline_stage === 'Negotiation' || l.status === 'Contacted');
+      const inNegotiation = scopedLeads.filter(l => l.pipeline_stage === 'Negotiation').length;
 
-      const newCount = state.leads.filter(l => l.status === 'New').length;
-      const contacted = state.leads.filter(l => l.status === 'Contacted').length;
-      const activeL = state.properties.filter(p => p.status === 'For Sale').length;
-      const pendL = state.properties.filter(p => p.status === 'Pending').length;
+      const newCount = scopedLeads.filter(l => l.status === 'New').length;
+      const contacted = scopedLeads.filter(l => l.status === 'Contacted').length;
+      const activeL = scopedProps.filter(p => p.status === 'For Sale').length;
+      const pendL = scopedProps.filter(p => p.status === 'Pending').length;
       const today = new Date().toISOString().split('T')[0];
-      const todayTours = state.bookings.filter(b => b.visit_date === today).length;
-      const conv = state.leads.length ? Math.round(closed.length / state.leads.length * 100) : 0;
+      const todayTours = scopedBookings.filter(b => b.visit_date === today).length;
+      const conv = scopedLeads.length ? Math.round(closed.length / scopedLeads.length * 100) : 0;
 
       document.getElementById('d-revenue').textContent = '$' + fmtNum(totalRev);
       document.getElementById('d-rev-sub').textContent = `↑ ${closed.length} deal${closed.length !== 1 ? 's' : ''} closed`;
-      document.getElementById('d-leads').textContent = state.leads.length;
+      document.getElementById('d-leads').textContent = scopedLeads.length;
       document.getElementById('d-new-leads').textContent = `↑ ${newCount} new lead${newCount !== 1 ? 's' : ''}`;
       document.getElementById('d-listings').textContent = inProgress.length;
       document.getElementById('d-pending').textContent = `↑ ${inNegotiation} in negotiation`;
@@ -6979,13 +7101,12 @@
       // Flow strip
       document.getElementById('flow-new').textContent = newCount;
       document.getElementById('flow-pipe').textContent = contacted;
-      document.getElementById('flow-book').textContent = state.bookings.filter(b => b.status === 'confirmed').length;
+      document.getElementById('flow-book').textContent = scopedBookings.filter(b => b.status === 'confirmed').length;
       document.getElementById('flow-closed').textContent = closed.length;
 
       // Bar chart (Leads History - last 7 days)
       const days = []; for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push({ date: d.toISOString().split('T')[0], label: d.toLocaleDateString('en-US', { weekday: 'short' }) }); }
-      // Mock distribution of leads across last 7 days for visual impact
-      const counts = days.map(d => state.leads.filter(l => (l.id.charCodeAt(0) + l.id.charCodeAt(l.id.length - 1)) % 7 === days.indexOf(d)).length + 1);
+      const counts = days.map(d => scopedLeads.filter(l => (l.id.charCodeAt(0) + l.id.charCodeAt(l.id.length - 1)) % 7 === days.indexOf(d)).length + 1);
       const mx = Math.max(...counts, 1);
       const chartEl = document.getElementById('dash-chart');
       if (chartEl) {
@@ -6995,10 +7116,10 @@
       // Recent leads (show source badge)
       const sc = s => s >= 80 ? 'score-h' : s >= 50 ? 'score-m' : 'score-l';
       const bc = { 'New': 'badge-new', 'Contacted': 'badge-contacted', 'Closed': 'badge-closed' };
-      document.getElementById('d-leads-tbody').innerHTML = state.leads.slice(0, 5).map(l => `<tr onclick="viewLead('${l.id}')" style="cursor:pointer"><td style="font-weight:600">${l.name}</td><td style="font-size:12px;color:var(--muted)">${(l.property_interest || '').split(',')[0] || '—'}</td><td><span class="badge ${bc[l.status] || ''}">${l.status}</span></td><td><span class="score ${sc(l.score)}">${l.score}</span></td><td>${getSourceBadge(l.source)}</td></tr>`).join('') || '<tr><td colspan="5" class="table-empty">No leads yet</td></tr>';
+      document.getElementById('d-leads-tbody').innerHTML = scopedLeads.slice(0, 5).map(l => `<tr onclick="viewLead('${l.id}')" style="cursor:pointer"><td style="font-weight:600">${l.name}</td><td style="font-size:12px;color:var(--muted)">${(l.property_interest || '').split(',')[0] || '—'}</td><td><span class="badge ${bc[l.status] || ''}">${l.status}</span></td><td><span class="score ${sc(l.score)}">${l.score}</span></td><td>${getSourceBadge(l.source)}</td></tr>`).join('') || '<tr><td colspan="5" class="table-empty">No leads yet</td></tr>';
 
       // Today's visits
-      const todayVisits = state.bookings.filter(b => b.visit_date === today);
+      const todayVisits = scopedBookings.filter(b => b.visit_date === today);
       const tvEl = document.getElementById('d-today-visits');
       if (tvEl) {
         tvEl.innerHTML = todayVisits.length ? todayVisits.map(b => {
@@ -7024,14 +7145,14 @@
       if (dPendingWrap) dPendingWrap.style.display = 'none';
 
       // Top property
-      const topP = [...state.properties].sort((a, b) => (b.views || 0) - (a.views || 0))[0];
+      const topP = [...scopedProps].sort((a, b) => (b.views || 0) - (a.views || 0))[0];
       const dTopProp = document.getElementById('d-top-prop');
       if (dTopProp) {
         dTopProp.innerHTML = topP ? `<div style="font-size:28px;margin-bottom:6px">🏆</div><div style="font-weight:600">${topP.name}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${topP.views} views · $${fmtNum(topP.price)}</div>` : '<div style="color:var(--muted);font-size:13px">No properties yet</div>';
       }
 
       // Next booking
-      const nb = state.bookings.filter(b => b.visit_date >= today && (b.status || '').toLowerCase() !== 'rejected').sort((a, b) => a.visit_date.localeCompare(b.visit_date))[0];
+      const nb = scopedBookings.filter(b => b.visit_date >= today && (b.status || '').toLowerCase() !== 'rejected').sort((a, b) => a.visit_date.localeCompare(b.visit_date))[0];
       const dNextBooking = document.getElementById('d-next-booking');
       if (dNextBooking) {
         dNextBooking.innerHTML = nb ? `<div style="font-size:28px;margin-bottom:6px">📅</div><div style="font-weight:600">${nb.visit_date}</div><div style="font-size:12px;color:var(--muted);margin-top:3px">${nb.client_name} · ${nb.visit_time || ''}</div><div style="display:flex;gap:8px;justify-content:center;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="updateBookingStatus('${nb.id}','confirmed')">Confirm</button></div>` : '<div style="color:var(--muted);font-size:13px">No upcoming tours</div>';
@@ -7039,8 +7160,8 @@
 
       // 4. Update HUD
       if (document.getElementById('hud-rev')) document.getElementById('hud-rev').textContent = '$' + fmtNum(totalRev);
-      if (document.getElementById('hud-hot')) document.getElementById('hud-hot').textContent = state.leads.filter(l => l.score >= 80).length;
-      if (document.getElementById('hud-visits')) document.getElementById('hud-visits').textContent = state.bookings.filter(b => b.visit_date === today).length;
+      if (document.getElementById('hud-hot')) document.getElementById('hud-hot').textContent = scopedLeads.filter(l => l.score >= 80).length;
+      if (document.getElementById('hud-visits')) document.getElementById('hud-visits').textContent = scopedBookings.filter(b => b.visit_date === today).length;
     }
 
 
@@ -7257,7 +7378,8 @@
     function renderLeads() {
       const bc = { 'New': 'badge-new', 'Contacted': 'badge-contacted', 'Closed': 'badge-closed', 'Qualified': 'badge-confirmed', 'Negotiation': 'badge-scheduled' };
 
-      let filtered = [...state.leads].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      const scoped = getScopedLeads();
+      let filtered = [...scoped].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
       if (leadFilter.startsWith('src:')) {
         const src = leadFilter.slice(4);
@@ -7267,7 +7389,7 @@
       }
 
       const today = new Date().toISOString().split('T')[0];
-      const newToday = state.leads.filter(l => (l.created_at || '').startsWith(today)).length;
+      const newToday = scoped.filter(l => (l.created_at || '').startsWith(today)).length;
 
       if (document.getElementById('lead-new-today')) document.getElementById('lead-new-today').textContent = newToday + ' New Today';
 
@@ -7401,7 +7523,8 @@
       let globalVal = 0;
       let activeDealsCount = 0;
 
-      state.leads.forEach(l => {
+      const scopedLeads = getScopedLeads();
+      scopedLeads.forEach(l => {
         const s = l.pipeline_stage || 'New';
         if (groups[s]) groups[s].push(l);
         else groups.New.push(l);
@@ -7432,7 +7555,7 @@
           // Estimate deal value from property
           let dealVal = 550000;
           if (l.property_interest) {
-            const matchedProp = state.properties.find(p => l.property_interest.includes(p.name));
+            const matchedProp = getScopedProperties().find(p => l.property_interest.includes(p.name));
             if (matchedProp) dealVal = matchedProp.price;
           }
           if (stage !== 'Closed') globalVal += dealVal;
@@ -7579,35 +7702,15 @@
       document.getElementById('save-prop-btn').textContent = 'Save Listing';
       document.getElementById('save-prop-btn').onclick = saveProperty;
       // Show all fields
-      document.querySelectorAll('#modal-addProperty .form-group, #modal-addProperty [style*="grid-template-columns"]').forEach(el => el.style.display = '');
-      renderImgPreviews();
-      openModal('addProperty');
-    }
-
-    function openAddImagesModal(id) {
-      editingPropId = id;
-      pendingImages = [];
-      document.getElementById('prop-modal-title').textContent = 'Add Images';
-      document.getElementById('save-prop-btn').textContent = 'Upload Images';
-      document.getElementById('save-prop-btn').onclick = saveProperty;
-
-      // Hide all fields EXCEPT the image upload area
-      document.querySelectorAll('#modal-addProperty .form-group, #modal-addProperty [style*="grid-template-columns"]').forEach(el => {
-        if (!el.querySelector('#img-drop')) el.style.display = 'none';
-        else el.style.display = '';
-      });
-      renderImgPreviews();
-      openModal('addProperty');
-    }
-
-    function renderProperties() {
+      document.querySelectorAll('#modal-addProperty .     function renderProperties() {
       const bc = { 'For Sale': 'badge-forsale', 'Pending': 'badge-pending', 'Sold': 'badge-sold' };
       const bg = { 'For Sale': 'rgba(13,18,27,0.7)', 'Pending': 'rgba(240,192,64,0.1)', 'Sold': 'rgba(46,204,138,0.1)' };
-      const filtered = propFilter === 'all' ? state.properties : state.properties.filter(p => p.status === propFilter);
+      const scoped = getScopedProperties();
+      const filtered = propFilter === 'all' ? scoped : scoped.filter(p => p.status === propFilter);
 
       // Update Intelligence Strip
       let totalVal = 0, totalViews = 0, activeCount = 0;
-      state.properties.forEach(p => {
+      scoped.forEach(p => {
         if (p.status === 'For Sale' || p.status === 'Pending') {
           totalVal += (p.price || 0);
           activeCount++;
@@ -7789,12 +7892,13 @@
       const propSel = document.getElementById('nb-prop');
 
       // Conflict check
-      const conflict = state.bookings.find(b => b.visit_date === date && b.visit_time === time);
+      const scopedBookings = getScopedBookings();
+      const conflict = scopedBookings.find(b => b.visit_date === date && b.visit_time === time);
       if (conflict) {
         if (!confirm(`⚠️ Warning! You already have a tour scheduled with ${conflict.client_name} at exactly ${time}. Do you still want to allow this double-booking?`)) return;
       }
 
-      const visit = { client_name: name, client_phone: document.getElementById('nb-phone').value, client_email: email, property_id: propSel.value || null, property_name: propSel.options[propSel.selectedIndex]?.text || '', visit_date: date, visit_time: time, notes: document.getElementById('nb-notes').value, status: 'pending' };
+      const visit = { client_name: name, client_phone: document.getElementById('nb-phone').value, client_email: email, property_id: propSel.value || null, property_name: propSel.options[propSel.selectedIndex]?.text || '', visit_date: date, visit_time: time, notes: document.getElementById('nb-notes').value, status: 'pending', agent_email: state.agent.email };
 
       // 1. Local Save
       const saved = DB.insert(DB.BOOKINGS, visit);
@@ -7911,7 +8015,8 @@
       }
 
       const bookedCounts = {};
-      state.bookings.forEach(b => {
+      const scopedBookings = getScopedBookings();
+      scopedBookings.forEach(b => {
         bookedCounts[b.visit_date] = (bookedCounts[b.visit_date] || 0) + 1;
       });
 
@@ -7941,7 +8046,7 @@
       document.getElementById('cal-grid').innerHTML = html;
 
       // 2. Premium Booking List (Filtered by selectedCalDate)
-      const dateBookings = state.bookings.filter(b => b.visit_date === selectedCalDate).sort((a, b) => (a.visit_time || '').localeCompare(b.visit_time || ''));
+      const dateBookings = scopedBookings.filter(b => b.visit_date === selectedCalDate).sort((a, b) => (a.visit_time || '').localeCompare(b.visit_time || ''));
       const bookingListEl = document.getElementById('booking-list');
 
       let niceDateStr = "Selected Date";
@@ -8135,13 +8240,15 @@
 
     function populateBookingProps() {
       const sel = document.getElementById('nb-prop');
-      const opts = state.properties.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      const scopedProps = getScopedProperties();
+      const opts = scopedProps.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
       if (sel) sel.innerHTML = opts || '<option>No properties yet</option>';
       populateMarketingSelects();
     }
 
     function populateMarketingSelects() {
-      const opts = state.properties.map(p => `<option value="${p.id}">${p.name} — $${fmtNum(p.price)}</option>`).join('');
+      const scopedProps = getScopedProperties();
+      const opts = scopedProps.map(p => `<option value="${p.id}">${p.name} — $${fmtNum(p.price)}</option>`).join('');
       const noOpt = '<option>No properties yet</option>';
       ['share-prop-sel', 'email-prop-sel', 'sms-prop-sel', 'lcp-prop-sel', 'mkt-kit-prop-sel', 'mkt-elite-prop-sel'].forEach(id => {
         const el = document.getElementById(id); if (el) el.innerHTML = opts || noOpt;
@@ -8164,7 +8271,8 @@
     function openAgencyLaunchWizard() {
       mktActiveStep = 1;
       const sel = document.getElementById('mkt-wiz-prop');
-      sel.innerHTML = state.properties.map(p => `<option value="${p.id}">${p.name} — $${fmtNum(p.price)}</option>`).join('') || '<option>No properties yet</option>';
+      const scopedProps = getScopedProperties();
+      sel.innerHTML = scopedProps.map(p => `<option value="${p.id}">${p.name} — $${fmtNum(p.price)}</option>`).join('') || '<option>No properties yet</option>';
       nextMktStep(1);
       openModal('agencyLaunch');
       updateMktPreview();
@@ -8186,7 +8294,7 @@
     function updateMktPreview() {
       const propId = document.getElementById('mkt-wiz-prop').value;
       const goal = document.getElementById('mkt-wiz-goal').value;
-      const p = state.properties.find(x => x.id === propId);
+      const p = getScopedProperties().find(x => x.id === propId);
       if (!p) return;
 
       const captions = {
@@ -8227,7 +8335,7 @@
 
         // Trigger SMS Blast if selected
         if (mktSelectedChannels.includes('sms')) {
-          const recipients = state.leads.map(l => l.phone).filter(p => !!p);
+          const recipients = getScopedLeads().map(l => l.phone).filter(p => !!p);
           if (recipients.length > 0) {
             fetch('/api/sms/blast', {
               method: 'POST',
@@ -8291,7 +8399,7 @@
     async function generateEliteCampaign() {
       const propId = document.getElementById('mkt-elite-prop-sel').value;
       const objective = document.getElementById('mkt-elite-objective').value;
-      const prop = state.properties.find(p => p.id === propId);
+      const prop = getScopedProperties().find(p => p.id === propId);
       if (!prop) { toast('Select a property for the campaign.', true); return; }
 
       const loader = document.getElementById('mkt-elite-loading');
@@ -8529,7 +8637,7 @@
 
     function renderEliteWALeads() {
       const filter = document.getElementById('wa-elite-filter')?.value || 'all';
-      const leads = state.leads.filter(l => {
+      const leads = getScopedLeads().filter(l => {
         if (filter === 'Hot') return l.score >= 80;
         if (filter === 'Contacted') return l.status === 'Contacted';
         return true;
@@ -8548,7 +8656,7 @@
         </div>
       `).join('') || '<div style="font-size:11px; color:var(--muted); text-align:center">No matches found.</div>';
 
-      const prop = state.properties.find(p => p.id === document.getElementById('mkt-elite-prop-sel').value);
+      const prop = getScopedProperties().find(p => p.id === document.getElementById('mkt-elite-prop-sel').value);
       const msg = `PropEdge Elite Update: The situation for ${prop ? prop.name : 'our listings'} has changed. $${prop ? fmtNum(prop.price) : ''} is the current market entry. We suggest immediate action. View: ${document.getElementById('mkt-elite-url').value}`;
       document.getElementById('wa-elite-msg').value = msg;
     }
@@ -8564,7 +8672,7 @@
       status.textContent = 'Analyzing Network...';
 
       const filter = document.getElementById('email-elite-filter').value;
-      const leads = state.leads.filter(l => {
+      const leads = getScopedLeads().filter(l => {
         if (filter === 'Hot') return l.score >= 80;
         if (filter === 'Contacted') return l.status === 'Contacted';
         return true;
@@ -9091,7 +9199,7 @@
     async function downloadAsImage() {
       const card = document.getElementById('mkt-sc-preview');
       const propId = document.getElementById('mkt-kit-prop-sel').value;
-      const prop = state.properties.find(p => p.id === propId) || { name: 'property' };
+      const prop = getScopedProperties().find(p => p.id === propId) || { name: 'property' };
 
       toast('Generating high-quality image...');
       try {
@@ -9224,7 +9332,7 @@
     function doSocialShare() {
       const propId = document.getElementById('share-prop-sel').value;
       const platform = document.getElementById('share-platform').value;
-      const prop = state.properties.find(p => p.id === propId);
+      const prop = getScopedProperties().find(p => p.id === propId);
       if (!prop) { toast('Select a property first.', true); return; }
       const a = state.agent;
       const msg = `${prop.name}\nLocation: ${prop.address || 'Dubai'}\nPrice: $${fmtNum(prop.price)} | ${prop.bedrooms} BR | ${prop.area_sqft ? Number(prop.area_sqft).toLocaleString() + ' sqft' : ''}\n\n${prop.description || 'A stunning property now available.'}\n\nContact ${a.name || 'Agent'}: ${a.phone || ''}\n${a.website || ''}`;
@@ -9241,7 +9349,8 @@
     // 2. WHATSAPP BLAST
     function renderWALeads() {
       const filter = document.getElementById('wa-leads-filter')?.value || 'all';
-      const leads = filter === 'all' ? state.leads : state.leads.filter(l => l.status === filter);
+      const scopedLeads = getScopedLeads();
+      const leads = filter === 'all' ? scopedLeads : scopedLeads.filter(l => l.status === filter);
       const container = document.getElementById('wa-leads-list'); if (!container) return;
       if (!leads.length) { container.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:12px">No leads found</div>'; return; }
       container.innerHTML = leads.map(l => `
@@ -9256,14 +9365,15 @@
 
     async function sendEmailBlast() {
       const filter = document.getElementById('email-leads-filter')?.value || 'all';
-      const leads = filter === 'all' ? state.leads : state.leads.filter(l => l.status === filter);
+      const scopedLeads = getScopedLeads();
+      const leads = filter === 'all' ? scopedLeads : scopedLeads.filter(l => l.status === filter);
       const validLeads = leads.filter(l => Boolean(l.email));
 
       if (!validLeads.length) { toast('No valid leads with email addresses to blast.', true); return; }
       if (!confirm(`Are you sure you want to send this template to ${validLeads.length} leads automatically via API?`)) return;
 
       const propId = document.getElementById('email-prop-sel').value;
-      const prop = propId ? state.properties.find(p => p.id === propId) : null;
+      const prop = propId ? getScopedProperties().find(p => p.id === propId) : null;
       const a = state.agent;
       const baseTmpl = document.getElementById('email-message').value || 'Hi {name}, hope you are well! — {agent}';
 
@@ -9320,7 +9430,7 @@
     function generateEmailDraft() {
       const propId = document.getElementById('email-prop-sel').value;
       const type = document.getElementById('email-type').value;
-      const prop = state.properties.find(p => p.id === propId);
+      const prop = getScopedProperties().find(p => p.id === propId);
       if (!prop) { toast('Select a property first.', true); return; }
       const a = state.agent;
       const date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -9371,7 +9481,7 @@ ${date}`;
     function generateSMS() {
       const propId = document.getElementById('sms-prop-sel').value;
       const type = document.getElementById('sms-type').value;
-      const prop = state.properties.find(p => p.id === propId);
+      const prop = getScopedProperties().find(p => p.id === propId);
       if (!prop) { toast('Select a property first.', true); return; }
       const a = state.agent;
       const templates = {
@@ -9394,8 +9504,9 @@ ${date}`;
     // 5. FEATURED LISTINGS
     function renderFeaturedList() {
       const container = document.getElementById('featured-list'); if (!container) return;
-      if (!state.properties.length) { container.innerHTML = '<div style="color:var(--muted);font-size:13px">No properties yet</div>'; return; }
-      container.innerHTML = state.properties.map(p => `
+      const scopedProps = getScopedProperties();
+      if (!scopedProps.length) { container.innerHTML = '<div style="color:var(--muted);font-size:13px">No properties yet</div>'; return; }
+      container.innerHTML = scopedProps.map(p => `
     <div style="background:var(--surface2);border:1px solid ${p.featured ? 'rgba(240,192,64,.4)' : ' var(--border)'};border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:14px">
       <div style="font-size:24px"></div>
       <div style="flex:1">
@@ -9418,7 +9529,7 @@ ${date}`;
     // 6. LEAD CAPTURE PAGE
     function generateLeadCapturePage() {
       const propId = document.getElementById('lcp-prop-sel').value;
-      const prop = state.properties.find(p => p.id === propId);
+      const prop = getScopedProperties().find(p => p.id === propId);
       if (!prop) { toast('Select a property first.', true); return; }
       const a = state.agent;
       const cover = prop.images && prop.images[0] ? `background-image:url('${prop.images[0]}');background-size:cover;background-position:center;` : 'background:#1a1a18;';
@@ -9457,14 +9568,15 @@ ${date}`;
     // ANALYTICS
     // ================================================================
     function renderAnalytics() {
-      const totalViews = state.properties.reduce((s, p) => s + (p.views || 0), 0);
-      const leads = state.leads;
-      const closed = leads.filter(l => l.status === 'Closed');
-      const negotiation = leads.filter(l => l.status === 'Negotiation');
-      const contacted = leads.filter(l => l.status === 'Contacted');
-      const newLeads = leads.filter(l => l.status === 'New');
+      const scopedProps = getScopedProperties();
+      const scopedLeads = getScopedLeads();
+      const totalViews = scopedProps.reduce((s, p) => s + (p.views || 0), 0);
+      const closed = scopedLeads.filter(l => l.status === 'Closed');
+      const negotiation = scopedLeads.filter(l => l.status === 'Negotiation');
+      const contacted = scopedLeads.filter(l => l.status === 'Contacted');
+      const newLeads = scopedLeads.filter(l => l.status === 'New');
 
-      const conv = leads.length ? Math.round(closed.length / leads.length * 100) : 0;
+      const conv = scopedLeads.length ? Math.round(closed.length / scopedLeads.length * 100) : 0;
 
       // Calculate Weighted Revenue Projection
       // Closed (100%), Negotiation (60%), Contacted (20%)
@@ -9473,21 +9585,21 @@ ${date}`;
         (contacted.reduce((s, l) => s + (l.budget || 550000), 0) * 0.2);
 
       document.getElementById('an-views').textContent = totalViews.toLocaleString();
-      document.getElementById('an-leads').textContent = leads.length;
+      document.getElementById('an-leads').textContent = scopedLeads.length;
       document.getElementById('an-conv').textContent = conv + '%';
       document.getElementById('an-projected').textContent = '$' + fmtNum(projected);
 
       // Render Pipeline Funnel
       const funnel = document.getElementById('an-funnel');
       const stages = [
-        { label: 'Total Awareness (Leads)', count: leads.length, pct: 100 },
+        { label: 'Total Awareness (Leads)', count: scopedLeads.length, pct: 100 },
         { label: 'Active Engagement', count: contacted.length + negotiation.length + closed.length, pct: 0 },
         { label: 'Negotiations', count: negotiation.length + closed.length, pct: 0 },
         { label: 'Revenue (Closed)', count: closed.length, pct: 0 }
       ];
 
       // Calculate percentages relative to top stage
-      stages.forEach((s, i) => { if (i > 0) s.pct = leads.length ? Math.round(s.count / leads.length * 100) : 0; });
+      stages.forEach((s, i) => { if (i > 0) s.pct = scopedLeads.length ? Math.round(s.count / scopedLeads.length * 100) : 0; });
 
       if (funnel) {
         funnel.innerHTML = stages.map((s, i) => `
@@ -9501,11 +9613,11 @@ ${date}`;
       }
 
       // Top Properties
-      const maxV = Math.max(...state.properties.map(p => p.views || 0), 1);
-      document.getElementById('an-prop-list').innerHTML = ([...state.properties].sort((a, b) => (b.views || 0) - (a.views || 0)).map(p => `<div class="metric-row"><div class="metric-label" style="font-size:11px">${p.name}</div><div class="metric-bar-bg"><div class="metric-bar-fill" style="width:${Math.round((p.views || 0) / maxV * 100)}%"></div></div><div class="metric-value">${p.views || 0}</div></div>`).join('')) || '<div class="table-empty">No data</div>';
+      const maxV = Math.max(...scopedProps.map(p => p.views || 0), 1);
+      document.getElementById('an-prop-list').innerHTML = ([...scopedProps].sort((a, b) => (b.views || 0) - (a.views || 0)).map(p => `<div class="metric-row"><div class="metric-label" style="font-size:11px">${p.name}</div><div class="metric-bar-bg"><div class="metric-bar-fill" style="width:${Math.round((p.views || 0) / maxV * 100)}%"></div></div><div class="metric-value">${p.views || 0}</div></div>`).join('')) || '<div class="table-empty">No data</div>';
 
       // Lead Sources
-      const sources = {}; state.leads.forEach(l => { const s = l.source || 'Other'; sources[s] = (sources[s] || 0) + 1; });
+      const sources = {}; scopedLeads.forEach(l => { const s = l.source || 'Other'; sources[s] = (sources[s] || 0) + 1; });
       const totalSrc = Object.values(sources).reduce((a, b) => a + b, 1);
       const srcColors = { Website: 'var(--blue)', WhatsApp: 'var(--green)', Social: 'var(--accent2)', Referral: 'var(--red)', Other: 'var(--muted)' };
       document.getElementById('an-source-list').innerHTML = Object.entries(sources).map(([src, cnt]) => `<div class="metric-row"><div class="metric-label" style="font-size:11px">${src}</div><div class="metric-bar-bg"><div class="metric-bar-fill" style="width:${Math.round(cnt / totalSrc * 100)}%;background:${srcColors[src] || 'var(--accent)'}"></div></div><div class="metric-value" style="color:${srcColors[src] || 'var(--accent)'}">${Math.round(cnt / totalSrc * 100)}%</div></div>`).join('') || '<div class="table-empty">No data</div>';
@@ -9702,14 +9814,16 @@ ${date}`;
       if (bar) bar.style.width = '40%';
 
       // 1. Analyze Leads for "Heat" changes
-      const hotLeads = state.leads.filter(l => l.score >= 80);
+      const scopedLeads = getScopedLeads();
+      const hotLeads = scopedLeads.filter(l => l.score >= 80);
       if (hotLeads.length > 0) {
         const randomLead = hotLeads[Math.floor(Math.random() * hotLeads.length)];
         postToBrainFeed(`Priority monitor on ${randomLead.name}. Status: HIGH intent. Ready for closing.`, 'success');
       }
 
       // 2. Scan for "Cold" properties
-      const coldProps = state.properties.filter(p => !p.views || p.views < 50);
+      const scopedProps = getScopedProperties();
+      const coldProps = scopedProps.filter(p => !p.views || p.views < 50);
       if (coldProps.length > 0) {
         const p = coldProps[Math.floor(Math.random() * coldProps.length)];
         postToBrainFeed(`Prop Alert: "${p.name}" view count is stagnant. Recommend price adjustment or Social Blast.`, 'warning');
@@ -9759,7 +9873,7 @@ ${date}`;
       const list = document.getElementById('prediction-list');
       if (!list) return;
 
-      const sorted = [...state.leads].sort((a, b) => b.score - a.score);
+      const sorted = [...getScopedLeads()].sort((a, b) => b.score - a.score);
       list.innerHTML = sorted.map(l => `
         <div style="padding:14px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px">
            <div style="width:40px; height:40px; border-radius:50%; background:var(--surface1); display:flex; align-items:center; justify-content:center; font-weight:800; border:2px solid ${l.score >= 80 ? 'var(--green)' : 'var(--muted)'}">
@@ -9785,8 +9899,8 @@ ${date}`;
       await new Promise(r => setTimeout(r, 1500));
 
       const matches = [];
-      state.leads.forEach(l => {
-        state.properties.forEach(p => {
+      getScopedLeads().forEach(l => {
+        getScopedProperties().forEach(p => {
           if (p.bedrooms && l.bhk_preference && l.bhk_preference.includes(p.bedrooms)) {
             matches.push({ lead: l.name, prop: p.name, reason: `Perfect BHK match (${p.bedrooms})` });
           }
@@ -9806,15 +9920,16 @@ ${date}`;
     function populateAIFollowupSelect() {
       const sel = document.getElementById('ai-followup-lead-sel');
       if (!sel) return;
-      sel.innerHTML = state.leads.length
-        ? state.leads.map(l => `<option value="${l.id}">${l.name}</option>`).join('')
+      const scopedLeads = getScopedLeads();
+      sel.innerHTML = scopedLeads.length
+        ? scopedLeads.map(l => `<option value="${l.id}">${l.name}</option>`).join('')
         : '<option>No leads</option>';
     }
 
     async function architectFollowup() {
       const sel = document.getElementById('ai-followup-lead-sel');
       const leadId = sel.value;
-      const lead = state.leads.find(l => l.id === leadId);
+      const lead = getScopedLeads().find(l => l.id === leadId);
       if (!lead) return;
 
       toast(`Architecting perfect response for ${lead.name}...`);
@@ -9845,6 +9960,66 @@ ${date}`;
     // ================================================================
     // TEAM
     // ================================================================
+    function renderTeamPerformanceBreakdown() {
+      const tbody = document.getElementById('team-performance-tbody');
+      if (!tbody) return;
+      
+      const role = localStorage.getItem('pe_role') || 'admin';
+      const container = document.getElementById('team-revenue-card');
+      if (role !== 'admin') {
+        if (container) container.style.display = 'none';
+        return;
+      } else {
+        if (container) container.style.display = 'block';
+      }
+
+      const agents = [
+        { name: 'Sarah Al-Rashid', email: 'saishivaraju.m2002@gmail.com', coverage: 'Downtown & Marina' },
+        { name: 'Elena Rostova', email: 'elena@zorvo.test', coverage: 'Palm Jumeirah & Beachfront' },
+        { name: 'Marcus Vance', email: 'marcus@zorvo.test', coverage: 'Business Bay & Hills' },
+        { name: 'Aisha Rahman', email: 'aisha@zorvo.test', coverage: 'Emirates Hills & Villas' },
+        { name: 'Vikram Singh', email: 'vikram@zorvo.test', coverage: 'Jumeirah Village & Parks' },
+        { name: 'Chloe Dubois', email: 'chloe@zorvo.test', coverage: 'Meydan & Sobha District' }
+      ];
+
+      tbody.innerHTML = agents.map(ag => {
+        // Count active properties uploaded by this agent
+        const activeProps = state.properties.filter(p => p.agent_email && p.agent_email.toLowerCase() === ag.email.toLowerCase()).length;
+        
+        // Count closed deals for this agent based on visit bookings or property interest
+        const closedDeals = state.leads.filter(l => {
+          if (l.status !== 'Closed') return false;
+          const hasVisit = state.bookings.some(b => b.agent_email && b.agent_email.toLowerCase() === ag.email.toLowerCase() && (b.client_email === l.email || b.client_phone === l.phone));
+          const hasProp = state.properties.some(p => p.agent_email && p.agent_email.toLowerCase() === ag.email.toLowerCase() && l.property_interest && l.property_interest.includes(p.name));
+          return hasVisit || hasProp;
+        });
+
+        // Compute revenue
+        let agentRev = 0;
+        closedDeals.forEach(l => {
+          let dealVal = l.budget || 550000;
+          if (l.property_interest) {
+            const matchedProp = state.properties.find(p => l.property_interest.includes(p.name));
+            if (matchedProp) dealVal = matchedProp.price;
+          }
+          agentRev += dealVal;
+        });
+
+        const estComm = agentRev * 0.03;
+
+        return `
+          <tr>
+            <td style="font-weight:700; color:#fff">${ag.name}</td>
+            <td><span class="badge" style="font-size:11px; background:rgba(240,192,64,0.1); color:var(--accent); border:1px solid rgba(240,192,64,0.2)">${ag.coverage}</span></td>
+            <td style="font-weight:600">${activeProps} listings</td>
+            <td style="font-weight:600; color:var(--green)">${closedDeals.length} closed</td>
+            <td style="font-weight:900; color:#fff">$${fmtNum(agentRev)}</td>
+            <td style="font-weight:800; color:var(--accent)">$${fmtNum(estComm)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
     // ================================================================
     // FOLLOW-UP PANEL — Auto WhatsApp Sequences
     // ================================================================

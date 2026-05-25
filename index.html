@@ -578,6 +578,91 @@
       background: var(--surf)
     }
 
+    /* ── ADVISORS GRID ── */
+    .advisors-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 30px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .advisor-card {
+      background: var(--white);
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
+      position: relative;
+    }
+    .advisor-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 12px 30px rgba(184, 150, 90, 0.15);
+      border-color: var(--gold);
+    }
+    .advisor-card.active {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px rgba(184, 150, 90, 0.25), 0 12px 30px rgba(184, 150, 90, 0.2);
+    }
+    .advisor-img-w {
+      height: 250px;
+      background: #eee;
+      position: relative;
+      overflow: hidden;
+    }
+    .advisor-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .advisor-card:hover .advisor-img {
+      transform: scale(1.06);
+    }
+    .advisor-cnt {
+      padding: 20px;
+      position: relative;
+    }
+    .advisor-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 500;
+      color: var(--dark);
+      margin-bottom: 4px;
+    }
+    .advisor-role {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--gold);
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .advisor-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .advisor-badge {
+      font-size: 10px;
+      background: var(--surf);
+      color: var(--muted);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+    .advisor-card:hover .advisor-badge {
+      background: var(--blue-pale);
+      color: var(--blue);
+    }
+    .advisor-card.active .advisor-badge {
+      background: var(--blue-pale);
+      color: var(--blue);
+    }
+
     .lbl {
       display: flex;
       align-items: center;
@@ -2372,6 +2457,19 @@
       </div>
     </div>
   </section>
+
+  <!-- ── MEET OUR ADVISORS SECTION ── -->
+  <section class="sec sec-surf" id="advisors" style="padding: 80px 60px;">
+    <div style="text-align:center;margin-bottom:44px" class="fade">
+      <div class="lbl" style="justify-content:center">Expert Advisors</div>
+      <h2 style="font-size:2.5rem;color:var(--dark)">Meet Our <em style="font-style:italic;color:var(--gold)">Advisors</em></h2>
+      <p style="color:var(--muted);max-width:600px;margin:12px auto 0;font-size:0.95rem">Our elite partners bring deep sub-market expertise, bespoke advisory, and a track record of luxury real estate excellence in Dubai.</p>
+    </div>
+    <div class="advisors-grid fade" id="advisors-grid">
+      <!-- Dynamically generated advisor cards -->
+    </div>
+  </section>
+
   <section class="sec sec-dark" id="listings">
     <div class="listings-head fade">
       <div>
@@ -2627,12 +2725,23 @@
         </div>
         <div class="m-tags" id="mtg"></div>
         <div class="m-desc" id="md"></div>
+        
+        <!-- Listing Agent Profile Card -->
+        <div class="m-agent-card" id="m-agent-card" style="margin-top:24px;border-top:1px solid rgba(255,255,255,0.08);padding-top:20px;display:flex;align-items:center;gap:16px">
+          <img id="m-agent-img" src="" style="width:50px;height:50px;border-radius:50%;object-fit:cover;border:1px solid var(--gold)">
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--gold)">Listing Advisor</div>
+            <div id="m-agent-name" style="font-size:16px;font-weight:600;color:#faf8f4">Sarah Al-Rashid</div>
+            <div id="m-agent-phone" style="font-size:12px;color:var(--muted)">📱 +1 754 291 7462</div>
+          </div>
+        </div>
+
         <div class="m-foot"><button class="btn-g" onclick="cm();scheduleTourFromModal()"><i
               class="fas fa-calendar-alt"></i> Schedule
             Visit</button><button class="btn-g"
             style="background:rgba(184,150,90,.12);color:var(--goldl);border:1px solid rgba(184,150,90,.3)"
             onclick="cm();goto('contact')">Get Details</button><button class="btn-od"
-            onclick="cm();goto('contact')">Contact Agent</button></div>
+            onclick="cm();goto('contact')">Contact Advisor</button></div>
       </div>
     </div>
   </div>
@@ -3021,21 +3130,22 @@
     function di(k, r) { var a = da(k); r.id = r.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)); r.created_at = new Date().toISOString(); a.unshift(r); try { localStorage.setItem(k, JSON.stringify(a)); syncToDB(); } catch (e) { } return r; }
     var agent = {}, props = [], cf = 'all', mImgs = [], mIdx = 0, mapInited = false, sm = null;
     async function init() {
-      syncFromDB().catch(() => {}); // non-blocking background sync
-      if (!da(DB.PROPERTIES).length) {
-        var demoProps = [
-          { name: 'Skyview Residences', address: 'Downtown, Dubai', price: 1200000, bedrooms: '3', bathrooms: '2', area_sqft: 2100, status: 'For Sale', emoji: 'Apartment', views: 234, description: "Masterpiece of modern architecture set against Dubai's skyline.", images: ['https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=600&q=80', 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=600&q=80', 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=600&q=80'], latitude: 25.2048, longitude: 55.2708 },
-          { name: 'Marina Tower Suite', address: 'Dubai Marina', price: 850000, bedrooms: '2', bathrooms: '2', area_sqft: 1450, status: 'For Sale', emoji: 'Apartment', views: 189, description: 'Uninterrupted sea views with wraparound balcony.', images: ['https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=600&q=80', 'https://images.unsplash.com/photo-1493809842364-78817add7ffb?w=600&q=80'], latitude: 25.0804, longitude: 55.1403 },
-          { name: 'Palm Villa Estate', address: 'Palm Jumeirah', price: 2400000, bedrooms: '5+', bathrooms: '5+', area_sqft: 6800, status: 'Pending', emoji: 'Villa', views: 312, description: 'Extraordinary beachfront villa with private beach and infinity pool.', images: ['https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=600&q=80', 'https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=600&q=80', 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=600&q=80', 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=600&q=80'], latitude: 25.1124, longitude: 55.1390 },
-          { name: 'Downtown Loft', address: 'Business Bay', price: 420000, bedrooms: '1', bathrooms: '1', area_sqft: 750, status: 'Sold', emoji: 'Apartment', views: 145, description: 'Sophisticated urban loft in the heart of Business Bay.', images: ['https://images.unsplash.com/photo-1502672023488-70e25813eb80?w=600&q=80'], latitude: 25.1901, longitude: 55.2643 }
-        ];
-        demoProps.forEach(function (p) { di(DB.PROPERTIES, p); });
+      // Sync from DB first so we have accurate properties and agent information
+      try {
+        await syncFromDB();
+      } catch (e) {
+        console.error('Initial sync failed, running with cached data:', e.message);
       }
-      agent = dg(DB.AGENT) || { name: 'Sai Shiva', email: 'saishivaraju.m2002@gmail.com', phone: '+91 000 000 0000', agency_name: 'Zorvo Realty', license_number: 'RE-2026-00000' };
+      
+      agent = dg(DB.AGENT) || { name: 'Sarah Al-Rashid', email: 'saishivaraju.m2002@gmail.com', phone: '+1 754 291 7462', agency_name: 'Zorvo Realty', license_number: 'RE-2026-00000' };
       props = da(DB.PROPERTIES);
+      
       // Ensure bookings array exists
       if (!localStorage.getItem(DB.BOOKINGS)) localStorage.setItem(DB.BOOKINGS, '[]');
       updateAgent(); updateStats(); renderProps(); initMap(); initFade(); checkSession();
+      
+      // Dynamic loading of advisors from Supabase
+      loadTeamAgents().catch(() => {});
 
       // Initialize international phone inputs
       window.itiInstances = {};
@@ -3089,9 +3199,101 @@
       document.getElementById('hs-l').textContent = active;
       document.getElementById('hs-d').textContent = sold;
     }
+    var activeAgentEmailFilter = null;
+
+    async function loadTeamAgents() {
+      try {
+        const res = await fetch('/api/team/agents?teamId=saishivaraju.m2002@gmail.com', {
+          headers: { 'x-api-secret': 'zorvo_secret_2026' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.agents) {
+            renderAdvisors(data.agents);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load team agents:', e.message);
+      }
+    }
+
+    function renderAdvisors(agents) {
+      const grid = document.getElementById('advisors-grid');
+      if (!grid) return;
+      
+      if (!agents || !agents.length) {
+        grid.innerHTML = '<div style="text-align:center;color:var(--muted);grid-column:1/-1">No advisors active at this time.</div>';
+        return;
+      }
+      
+      const advisorAvatars = {
+        'elena@zorvo.test': 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&h=400&fit=crop&q=80',
+        'marcus@zorvo.test': 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&h=400&fit=crop&q=80',
+        'aisha@zorvo.test': 'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=400&h=400&fit=crop&q=80',
+        'vikram@zorvo.test': 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&h=400&fit=crop&q=80',
+        'chloe@zorvo.test': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&h=400&fit=crop&q=80'
+      };
+
+      grid.innerHTML = agents.map(function(a) {
+        const avatar = advisorAvatars[a.email.toLowerCase()] || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&q=80';
+        const areas = Array.isArray(a.coverage_areas) ? a.coverage_areas : (typeof a.coverage_areas === 'string' ? JSON.parse(a.coverage_areas) : []);
+        const areaBadges = areas.slice(0, 2).map(area => `<span class="advisor-badge">${area}</span>`).join('');
+        
+        return `<div class="advisor-card" data-email="${a.email}" onclick="toggleAdvisorFilter('${a.email}', this)">
+          <div class="advisor-img-w">
+            <img class="advisor-img" src="${avatar}" alt="${a.name}" onerror="this.src='https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&q=80'">
+          </div>
+          <div class="advisor-cnt">
+            <div class="advisor-name">${a.name}</div>
+            <div class="advisor-role">Real Estate Advisor</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px">📍 ${a.phone}</div>
+            <div class="advisor-badges">
+              ${areaBadges || '<span class="advisor-badge">Dubai Luxury</span>'}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function toggleAdvisorFilter(email, cardEl) {
+      const isCurrentlyActive = cardEl.classList.contains('active');
+      
+      // Clear all active classes
+      document.querySelectorAll('.advisor-card').forEach(c => c.classList.remove('active'));
+      
+      if (isCurrentlyActive) {
+        activeAgentEmailFilter = null;
+      } else {
+        activeAgentEmailFilter = email;
+        cardEl.classList.add('active');
+      }
+      
+      renderProps();
+      
+      // Smoothly scroll down to listings to see the results
+      const listingsSection = document.getElementById('listings');
+      if (listingsSection) {
+        listingsSection.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
     function fp(f, el) { cf = f; document.querySelectorAll('.f-tab').forEach(function (t) { t.classList.remove('active'); }); el.classList.add('active'); renderProps(); }
+    
     function renderProps() {
-      var filtered = cf === 'all' ? props : props.filter(function (p) { return p.status === cf; });
+      var filtered = props;
+      
+      // 1. Filter by Status Tab
+      if (cf !== 'all') {
+        filtered = filtered.filter(function (p) { return p.status === cf; });
+      }
+      
+      // 2. Filter by Advisor selection
+      if (activeAgentEmailFilter) {
+        filtered = filtered.filter(function (p) {
+          return p.agent_email && p.agent_email.toLowerCase() === activeAgentEmailFilter.toLowerCase();
+        });
+      }
+
       var c = document.getElementById('prop-cards');
       var sm2 = { 'For Sale': 'b-s', 'Pending': 'b-p', 'Sold': 'b-d' };
       var sl = { 'For Sale': 'For Sale', 'Pending': 'Offer Pending', 'Sold': 'Sold' };
@@ -3137,6 +3339,8 @@
           + '<div class="s-pr">$' + fmt(p.price) + '</div></div>';
       }).join('');
     }
+    var activePropertyListingAgentEmail = 'saishivaraju.m2002@gmail.com';
+
     function om(ps) {
       var p; try { p = JSON.parse(ps.replace(/&quot;/g, '"')); } catch (e) { st('Error loading property.', true); return; }
       mImgs = p.images && p.images.length ? p.images : []; mIdx = 0;
@@ -3147,6 +3351,27 @@
       document.getElementById('ma').textContent = p.address || '';
       document.getElementById('mp').textContent = '$' + fmt(p.price);
       document.getElementById('md').textContent = p.description || '';
+      
+      // Populate Agent profile details in modal
+      const agentImg = document.getElementById('m-agent-img');
+      const agentName = document.getElementById('m-agent-name');
+      const agentPhone = document.getElementById('m-agent-phone');
+      
+      const advisorAvatars = {
+        'elena@zorvo.test': 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&h=400&fit=crop&q=80',
+        'marcus@zorvo.test': 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&h=400&fit=crop&q=80',
+        'aisha@zorvo.test': 'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=400&h=400&fit=crop&q=80',
+        'vikram@zorvo.test': 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&h=400&fit=crop&q=80',
+        'chloe@zorvo.test': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&h=400&fit=crop&q=80'
+      };
+
+      const listingEmail = p.agent_email || 'saishivaraju.m2002@gmail.com';
+      activePropertyListingAgentEmail = listingEmail;
+      
+      if (agentName) agentName.textContent = p.agent_name || 'Sarah Al-Rashid';
+      if (agentPhone) agentPhone.textContent = '📱 ' + (p.agent_phone || '+1 754 291 7462');
+      if (agentImg) agentImg.src = advisorAvatars[listingEmail.toLowerCase()] || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&q=80';
+
       document.getElementById('mw').classList.add('open');
     }
 
@@ -3172,7 +3397,8 @@
           visit_date: date,
           visit_time: timeSlot,
           status: 'pending',
-          source: 'Website'
+          source: 'Website',
+          agent_email: activePropertyListingAgentEmail
         };
 
         // Show success immediately
@@ -3191,12 +3417,10 @@
 
         syncToDB();
 
-        const creds = JSON.parse(localStorage.getItem('pe_access') || 'null');
-        const agentEmail = creds ? creds.username : 'saishivaraju.m2002@gmail.com';
         fetch('/api/visits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-secret': 'zorvo_secret_2026' },
-          body: JSON.stringify({ agentEmail, visit: booking })
+          body: JSON.stringify({ agentEmail: activePropertyListingAgentEmail, visit: booking })
         }).catch(e => console.warn('Booking API Error:', e));
 
         setTimeout(closeLPop, 4000);
@@ -3354,33 +3578,50 @@
     function closeLM() {
       document.getElementById('lm-wrap').classList.remove('open');
     }
-    function doLogin() {
+    async function doLogin() {
       var user = document.getElementById('lm-user').value.trim();
       var pass = document.getElementById('lm-pass').value;
-      var creds = getCredentials();
       var errEl = document.getElementById('lm-err');
       if (!user || !pass) { errEl.textContent = 'Please enter username and password.'; errEl.style.display = 'block'; return; }
-      // Accept stored credentials OR master fallback (zorvo123) for any valid username
-      var validUser = (user === creds.username) || (user === 'saishivaraju.m2002@gmail.com');
-      var validPass = (pass === creds.password) || (pass === 'zorvo123');
-      if (validUser && validPass) {
-        // Save session (localStorage persists across tabs)
-        try { localStorage.setItem('pe_session', JSON.stringify({ expires: Date.now() + 8 * 60 * 60 * 1000 })); } catch (e) { }
-        errEl.style.display = 'none';
-        document.getElementById('lm-form').style.display = 'none';
-        document.getElementById('lm-success').style.display = 'block';
-        var a = dg(DB.AGENT) || {};
-        document.getElementById('lm-welcome-name').textContent = (a.name || 'Agent').split(' ')[0];
-        // Update footer button
-        var btn = document.getElementById('agent-access-btn');
-        var lbl = document.getElementById('aa-label');
-        if (btn) btn.classList.add('logged-in');
-        if (lbl) lbl.textContent = (a.name || 'Agent').split(' ')[0];
-      } else {
-        errEl.textContent = 'Incorrect username or password.';
+      
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: user, password: pass })
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          // Save session
+          localStorage.setItem('pe_session', JSON.stringify({ expires: Date.now() + 8 * 60 * 60 * 1000 }));
+          localStorage.setItem('pe_access', JSON.stringify({ username: data.email, password: pass }));
+          localStorage.setItem('pe_role', data.role);
+          
+          errEl.style.display = 'none';
+          document.getElementById('lm-form').style.display = 'none';
+          document.getElementById('lm-success').style.display = 'block';
+          document.getElementById('lm-welcome-name').textContent = data.name.split(' ')[0];
+          
+          var btn = document.getElementById('agent-access-btn');
+          var lbl = document.getElementById('aa-label');
+          if (btn) btn.classList.add('logged-in');
+          if (lbl) lbl.textContent = data.name.split(' ')[0];
+          
+          // Smooth redirect to appropriate dashboard
+          setTimeout(function() {
+            window.location.href = 'zorvo_dashboard.html';
+          }, 1200);
+        } else {
+          const data = await res.json();
+          errEl.textContent = data.error || 'Incorrect username or password.';
+          errEl.style.display = 'block';
+          document.getElementById('lm-pass').value = '';
+          document.getElementById('lm-pass').focus();
+        }
+      } catch (e) {
+        errEl.textContent = 'Connection Error: ' + e.message;
         errEl.style.display = 'block';
-        document.getElementById('lm-pass').value = '';
-        document.getElementById('lm-pass').focus();
       }
     }
     window.addEventListener('scroll', function () {
