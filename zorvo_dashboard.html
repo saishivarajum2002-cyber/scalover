@@ -7702,7 +7702,28 @@
       document.getElementById('save-prop-btn').textContent = 'Save Listing';
       document.getElementById('save-prop-btn').onclick = saveProperty;
       // Show all fields
-      document.querySelectorAll('#modal-addProperty .     function renderProperties() {
+      document.querySelectorAll('#modal-addProperty .form-group, #modal-addProperty [style*="grid-template-columns"]').forEach(el => el.style.display = '');
+      renderImgPreviews();
+      openModal('addProperty');
+    }
+
+    function openAddImagesModal(id) {
+      editingPropId = id;
+      pendingImages = [];
+      document.getElementById('prop-modal-title').textContent = 'Add Images';
+      document.getElementById('save-prop-btn').textContent = 'Upload Images';
+      document.getElementById('save-prop-btn').onclick = saveProperty;
+
+      // Hide all fields EXCEPT the image upload area
+      document.querySelectorAll('#modal-addProperty .form-group, #modal-addProperty [style*="grid-template-columns"]').forEach(el => {
+        if (!el.querySelector('#img-drop')) el.style.display = 'none';
+        else el.style.display = '';
+      });
+      renderImgPreviews();
+      openModal('addProperty');
+    }
+
+    function renderProperties() {
       const bc = { 'For Sale': 'badge-forsale', 'Pending': 'badge-pending', 'Sold': 'badge-sold' };
       const bg = { 'For Sale': 'rgba(13,18,27,0.7)', 'Pending': 'rgba(240,192,64,0.1)', 'Sold': 'rgba(46,204,138,0.1)' };
       const scoped = getScopedProperties();
